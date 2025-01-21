@@ -62,6 +62,10 @@ FLAG_WEIGHTS = [1, 1, 1]       # The scoring weight (value) of each flag
 FLAG_COLOR = GREEN             # The color of the flags
 FLAG_SIZE = 8
 
+# Interaction Model
+INTERACTION_MODEL = "kill"
+# ^ The model used to handle interactions between agents
+# Options: "kill", "respawn", "both_kill", "both_respawn"
 
 # ------------------------------------------------------------------------------
 # 5. ATTACKER PARAMETERS
@@ -116,4 +120,3 @@ DEFENDER_CONFIG = {
     "defender_3": {"start_node_id": 103},
     "defender_4": {"start_node_id": 104},
 }
-

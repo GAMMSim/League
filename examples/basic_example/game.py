@@ -53,6 +53,7 @@ for name, config in ATTACKER_CONFIG.items():
     agent_entry.setdefault("sensors", ATTACKER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", ATTACKER_GLOBAL_COLOR)
     agent_entry["map"] = Graph()
+    agent_entry["start_node_id"] = config.get("start_node_id", None)
     agent_config[name] = agent_entry
 
 # --- Add defender agents ---
@@ -65,6 +66,7 @@ for name, config in DEFENDER_CONFIG.items():
     agent_entry.setdefault("sensors", DEFENDER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", DEFENDER_GLOBAL_COLOR)
     agent_entry["map"] = Graph()
+    agent_entry["start_node_id"] = config.get("start_node_id", None)
     agent_config[name] = agent_entry
 
 # --- Create agents in the context using the combined configuration ---
@@ -137,6 +139,8 @@ print("Flags initialized.")
 
 # Run the game
 while not ctx.is_terminated():
+    check_agent_interaction(ctx, INTERACTION_MODEL)
+    
     for agent in ctx.agent.create_iter():
         if agent.strategy is not None:
             state = agent.get_state()
