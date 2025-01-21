@@ -1,7 +1,7 @@
 import random
 from gamms import sensor
 
-def strategy(state):
+def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS):
     sensor_data = state['sensor']
     for (type, data) in sensor_data.values():
         if type == sensor.SensorType.NEIGHBOR:
