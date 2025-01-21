@@ -4,7 +4,7 @@ import attacker_strategy
 import defender_strategy
 import pickle
 import os
-from utilities import *
+from gamms.utilities import *
 
 # ------------------------------------------------------------------------------
 # Initialize the game context with the selected visualization engine.
@@ -52,7 +52,8 @@ for name, config in ATTACKER_CONFIG.items():
     agent_entry.setdefault("capture_radius", ATTACKER_GLOBAL_CAPTURE_RADIUS)
     agent_entry.setdefault("sensors", ATTACKER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", ATTACKER_GLOBAL_COLOR)
-    agent_entry["map"] = Graph
+    agent_entry["map"] = Graph()
+    agent_entry["start_node_id"] = config.get("start_node_id", None)
     agent_config[name] = agent_entry
 
 # --- Add defender agents ---
@@ -64,7 +65,8 @@ for name, config in DEFENDER_CONFIG.items():
     agent_entry.setdefault("capture_radius", DEFENDER_GLOBAL_CAPTURE_RADIUS)
     agent_entry.setdefault("sensors", DEFENDER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", DEFENDER_GLOBAL_COLOR)
-    agent_entry["map"] = Graph
+    agent_entry["map"] = Graph()
+    agent_entry["start_node_id"] = config.get("start_node_id", None)
     agent_config[name] = agent_entry
 
 # --- Create agents in the context using the combined configuration ---
@@ -97,6 +99,7 @@ ctx.visual.set_graph_visual(**graph_vis_config)
 
 # Set the simulation time constant (affects speed of animations).
 ctx.visual._sim_time_constant = GAME_SPEED
+ctx.visual.draw_node_id = DRAW_NODE_ID
 
 # For each agent, configure its visualization using the agent configuration details.
 for name, config in agent_config.items():
@@ -135,11 +138,11 @@ for index, flag_node_id in enumerate(FLAG_POSITIONS):
 print("Flags initialized.")
 
 # Run the game
-while not ctx.is_terminated():
+while not ctx.is_terminated():    
     for agent in ctx.agent.create_iter():
         if agent.strategy is not None:
             state = agent.get_state()
-            agent.strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS)
+            agent.strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent)
             agent.set_state()
         else:
             state = agent.get_state()
@@ -148,5 +151,6 @@ while not ctx.is_terminated():
             agent.set_state()
 
     ctx.visual.simulate()
+    check_agent_interaction(ctx, G, INTERACTION_MODEL)
     
 # To kill the game, use control + c, or customize the termination condition in the while loop.

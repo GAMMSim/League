@@ -30,6 +30,7 @@ BLACK = "black"       # The color black
 
 WINDOW_SIZE = (1980, 1080)          # The size of the game window in pixels
 GAME_SPEED = 1                      # The speed of the game (the higher the number, the slower it runs)
+DRAW_NODE_ID = False                # Whether to draw the node ID on the graph
 VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
 # ^ This sets the engine used to render the game
 
@@ -42,7 +43,7 @@ VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
 GRAPH_PATH = "graph.pkl"
 # If GRAPH_PATH does not exist, a new graph will be generated based on:
 LOCATION = "West Point, New York, USA"  # The real-world location to generate the graph from
-RESOLUTION = 100.0                      # The resolution of the graph (higher means fewer nodes)
+RESOLUTION = 200.0                      # The resolution of the graph (higher means fewer nodes)
 
 
 # ------------------------------------------------------------------------------
@@ -61,6 +62,10 @@ FLAG_WEIGHTS = [1, 1, 1]       # The scoring weight (value) of each flag
 FLAG_COLOR = GREEN             # The color of the flags
 FLAG_SIZE = 8
 
+# Interaction Model
+INTERACTION_MODEL = "kill"
+# ^ The model used to handle interactions between agents
+# Options: "kill", "respawn", "both_kill", "both_respawn"
 
 # ------------------------------------------------------------------------------
 # 5. ATTACKER PARAMETERS
@@ -115,4 +120,3 @@ DEFENDER_CONFIG = {
     "defender_3": {"start_node_id": 103},
     "defender_4": {"start_node_id": 104},
 }
-

@@ -164,7 +164,7 @@ def extract_sensor_data(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
     defender_positions = agent.map.get_team_positions("defender")
     return attacker_positions, defender_positions
 
-def check_agent_interaction(ctx, model="kill"):
+def check_agent_interaction(ctx, G, model="kill"):
     attackers = []
     defenders = []
     for agent in ctx.agent.create_iter():
@@ -179,7 +179,7 @@ def check_agent_interaction(ctx, model="kill"):
         for defender in defenders:
             try:
                 # Compute the shortest path distance between the attacker and defender.
-                distance = nx.shortest_path_length(ctx.graph.graph,
+                distance = nx.shortest_path_length(G,
                                                    source=attacker.current_node_id,
                                                    target=defender.current_node_id)
             except (nx.NetworkXNoPath, nx.NodeNotFound):

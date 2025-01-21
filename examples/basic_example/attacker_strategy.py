@@ -1,5 +1,5 @@
 import random
-from utilities import *
+from gamms.utilities import *
 
 def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
     current_node = state['curr_pos']

@@ -1,13 +1,13 @@
 import random
-from gamms import sensor
+from gamms.utilities import *
 
-def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS):
-    sensor_data = state['sensor']
-    for (type, data) in sensor_data.values():
-        if type == sensor.SensorType.NEIGHBOR:
-            choice = random.choice(range(len(data)))
-            state['action'] = data[choice]
-            break
+def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
+    current_node = state['curr_pos']
+    attacker_positions, defender_positions = extract_sensor_data(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent)
+    
+    
+    neighbor_data = extract_neighbor_sensor_data(state)
+    state['action'] = random.choice(neighbor_data)
     
 
 def map_strategy(agent_config):

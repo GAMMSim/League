@@ -4,7 +4,7 @@ import attacker_strategy
 import defender_strategy
 import pickle
 import os
-from utilities import *
+from gamms.utilities import *
 
 # ------------------------------------------------------------------------------
 # Initialize the game context with the selected visualization engine.
@@ -138,9 +138,7 @@ for index, flag_node_id in enumerate(FLAG_POSITIONS):
 print("Flags initialized.")
 
 # Run the game
-while not ctx.is_terminated():
-    check_agent_interaction(ctx, INTERACTION_MODEL)
-    
+while not ctx.is_terminated():    
     for agent in ctx.agent.create_iter():
         if agent.strategy is not None:
             state = agent.get_state()
@@ -153,5 +151,6 @@ while not ctx.is_terminated():
             agent.set_state()
 
     ctx.visual.simulate()
+    check_agent_interaction(ctx, G, INTERACTION_MODEL)
     
 # To kill the game, use control + c, or customize the termination condition in the while loop.

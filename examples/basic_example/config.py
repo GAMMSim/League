@@ -43,7 +43,7 @@ VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
 GRAPH_PATH = "graph.pkl"
 # If GRAPH_PATH does not exist, a new graph will be generated based on:
 LOCATION = "West Point, New York, USA"  # The real-world location to generate the graph from
-RESOLUTION = 100.0                      # The resolution of the graph (higher means fewer nodes)
+RESOLUTION = 200.0                      # The resolution of the graph (higher means fewer nodes)
 
 
 # ------------------------------------------------------------------------------
