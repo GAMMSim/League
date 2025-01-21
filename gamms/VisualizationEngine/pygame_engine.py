@@ -40,6 +40,7 @@ class PygameVisualizationEngine(IVisualizationEngine):
         self._simulation_time = 0
         self._will_quit = False
         self._artists = {}
+        self.draw_node_id = False
 
     @property
     def width(self):
@@ -158,7 +159,7 @@ class PygameVisualizationEngine(IVisualizationEngine):
 
         # Note: Draw in layer order of back layer -> front layer
         self._draw_grid()
-        self._graph_visual.draw_graph(self._screen)
+        self._graph_visual.draw_graph(self._screen, self.draw_node_id)
         self.draw_agents()
         for artist in self._artists.values():
             artist['draw'](self.ctx, artist['data'])

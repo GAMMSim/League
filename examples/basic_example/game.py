@@ -4,6 +4,7 @@ import attacker_strategy
 import defender_strategy
 import pickle
 import os
+from utilities import *
 
 # ------------------------------------------------------------------------------
 # Initialize the game context with the selected visualization engine.
@@ -51,6 +52,7 @@ for name, config in ATTACKER_CONFIG.items():
     agent_entry.setdefault("capture_radius", ATTACKER_GLOBAL_CAPTURE_RADIUS)
     agent_entry.setdefault("sensors", ATTACKER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", ATTACKER_GLOBAL_COLOR)
+    agent_entry["map"] = Graph()
     agent_config[name] = agent_entry
 
 # --- Add defender agents ---
@@ -62,6 +64,7 @@ for name, config in DEFENDER_CONFIG.items():
     agent_entry.setdefault("capture_radius", DEFENDER_GLOBAL_CAPTURE_RADIUS)
     agent_entry.setdefault("sensors", DEFENDER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", DEFENDER_GLOBAL_COLOR)
+    agent_entry["map"] = Graph()
     agent_config[name] = agent_entry
 
 # --- Create agents in the context using the combined configuration ---
@@ -94,6 +97,7 @@ ctx.visual.set_graph_visual(**graph_vis_config)
 
 # Set the simulation time constant (affects speed of animations).
 ctx.visual._sim_time_constant = GAME_SPEED
+ctx.visual.draw_node_id = DRAW_NODE_ID
 
 # For each agent, configure its visualization using the agent configuration details.
 for name, config in agent_config.items():
@@ -136,7 +140,7 @@ while not ctx.is_terminated():
     for agent in ctx.agent.create_iter():
         if agent.strategy is not None:
             state = agent.get_state()
-            agent.strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS)
+            agent.strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent)
             agent.set_state()
         else:
             state = agent.get_state()

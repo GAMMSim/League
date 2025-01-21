@@ -41,11 +41,17 @@ class GraphVisual:
         #map_position = (map_position[0] + self.offset[0], map_position[1] + self.offset[1])
         return map_position
 
-    def draw_node(self, screen, node, color=(90, 90, 90)):
+    def draw_node(self, screen, node, color=(90, 90, 90), draw_id=False):
         # """Draw a node as a circle with a light greenish color."""
         position = (node.x, node.y)
         (x, y) = self.ScalePositionToScreen(position)
-        pygame.draw.circle(screen, color, (int(x), int(y)), 4)  # Light greenish color
+        pygame.draw.circle(screen, color, (int(x), int(y)), 4) 
+        # Draw node ID
+        if draw_id:
+            font = pygame.font.Font(None, 15)
+            text = font.render(str(node.id), True, (0, 0, 0))
+            text_rect = text.get_rect(center=(int(x), int(y)+10))
+            screen.blit(text, text_rect)
 
     def draw_edge(self, screen, edge):
         edge_color = (150, 150, 150)
@@ -75,14 +81,14 @@ class GraphVisual:
     def MoveGraphPosition(self, direction: tuple[float, float]):
         self.offset = (self.offset[0] + direction[0], self.offset[1] + direction[1])
         
-    def draw_graph(self, screen):
+    def draw_graph(self, screen, draw_id=False):
         """Draw the entire graph (edges and nodes)."""
         # Center of Graph:
         self.screen = screen
         for edge in self.graph.edges.values():
             self.draw_edge(screen, edge)
         for node in self.graph.nodes.values():
-            self.draw_node(screen, node)
+            self.draw_node(screen, node, draw_id=draw_id)
         
 
 

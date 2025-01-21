@@ -39,9 +39,6 @@ class Graph:
             self.graph.add_edge(source, target, **edge_attrs)
 
     def update_networkx_graph(self, nodes_data, edges_data):
-        if self.graph is None:
-            self.attach_networkx_graph(nodes_data, edges_data)
-            return
         for node_id, attrs in nodes_data.items():
             if not isinstance(attrs, dict):
                 try:
@@ -74,7 +71,7 @@ class Graph:
                 self.graph.add_edge(source, target, **edge_attrs)
 
     def set_agent_positions(self, agent_info):
-        self.agent_positions = {name: info for name, info in agent_info.items()}
+        self.agent_positions = {name: info.get("position") for name, info in agent_info.items()}
 
     def set_flag_positions(self, FLAG_POSITIONS):
         self.flag_positions = FLAG_POSITIONS
@@ -114,52 +111,5 @@ class Graph:
         # Remove the source node itself from the neighbors
         neighbors.pop(source_node, None)
         return list(neighbors.keys())
-    
-    def get_team_positions(self, team):
-        if not hasattr(self, 'agent_positions') or not self.agent_positions:
-            return []
-        return [pos for name, pos in self.agent_positions.items() if team in name]
         
-def extract_map_sensor_data(state):
-    sensor_data = state.get('sensor', {})
-    map_sensor = sensor_data.get('map')
-    if map_sensor is None:
-        raise ValueError("No map sensor data found in state.")
-    
-    sensor_type, map_data = map_sensor
-    if not (isinstance(map_data, tuple) and len(map_data) == 2):
-        raise ValueError("Map sensor data is not in the expected format (nodes_data, edges_data).")
-    
-    nodes_data, edges_data = map_data
-    return nodes_data, edges_data
-
-def extract_neighbor_sensor_data(state):
-    sensor_data = state.get('sensor', {})
-    neighbor_sensor = sensor_data.get('neighbor')
-    if neighbor_sensor is None:
-        raise ValueError("No neighbor sensor data found in state.")
-    
-    # Unpack the neighbor sensor tuple.
-    sensor_type, neighbor_data = neighbor_sensor
-    return neighbor_data
-
-def extract_agent_sensor_data(state):
-    sensor_data = state.get('sensor', {})
-    agent_sensor = sensor_data.get('agent')
-    if agent_sensor is None:
-        raise ValueError("No agent sensor data found in state.")
-    
-    # Unpack the sensor tuple: sensor_type, agent_info.
-    sensor_type, agent_info = agent_sensor
-    return agent_info
-
-def extract_sensor_data(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
-    nodes_data, edges_data =  extract_map_sensor_data(state)
-    agent_info = extract_agent_sensor_data(state)
-    agent.map.update_networkx_graph(nodes_data, edges_data)
-    agent.map.set_agent_positions(agent_info)
-    agent.map.set_flag_positions(FLAG_POSITIONS)
-    agent.map.set_flag_weights(FLAG_WEIGHTS)
-    attacker_positions = agent.map.get_team_positions("attacker")
-    defender_positions = agent.map.get_team_positions("defender")
-    return attacker_positions, defender_positions
+        

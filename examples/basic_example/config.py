@@ -30,6 +30,7 @@ BLACK = "black"       # The color black
 
 WINDOW_SIZE = (1980, 1080)          # The size of the game window in pixels
 GAME_SPEED = 1                      # The speed of the game (the higher the number, the slower it runs)
+DRAW_NODE_ID = False                # Whether to draw the node ID on the graph
 VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
 # ^ This sets the engine used to render the game
 

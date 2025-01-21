@@ -10,6 +10,5 @@ setup(
         'shapely',
         'networkx',
         'osmnx',
-        'os',
     ],
 )        
