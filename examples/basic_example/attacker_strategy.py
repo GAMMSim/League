@@ -1,13 +1,15 @@
 import random
-from gamms.utilities import *
+from utilities import *
 
-def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
+def strategy(state, agent):
     current_node = state['curr_pos']
-    attacker_positions, defender_positions = extract_sensor_data(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent)
+    flag_positions = state['flag_pos']
+    flag_weights = state['flag_weight']
+    attacker_positions, defender_positions = extract_sensor_data(state, flag_positions, flag_weights, agent)
     
     closest_flag = None
     min_distance = float('inf')
-    for flag in FLAG_POSITIONS:
+    for flag in flag_positions:
         try:
             # Compute the unweighted shortest path length.
             dist = nx.shortest_path_length(agent.map.graph, source=current_node, target=flag)
