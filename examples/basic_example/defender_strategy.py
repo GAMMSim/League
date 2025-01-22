@@ -1,7 +1,7 @@
 import random
 from utilities import *
 
-def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
+def strategy(state, agent):
     current_node = state['curr_pos']
     flag_positions = state['flag_pos']
     flag_weights = state['flag_weight']
@@ -11,7 +11,7 @@ def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
     closest_attacker = None
     min_distance = float('inf')
     for attacker in attacker_positions:
-        for flag in FLAG_POSITIONS:
+        for flag in flag_positions:
             try:
                 # Compute the unweighted shortest path length.
                 dist = nx.shortest_path_length(agent.map.graph, source=attacker, target=flag)

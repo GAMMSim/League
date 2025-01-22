@@ -1,7 +1,7 @@
 import random
 from utilities import *
 
-def strategy(state, FLAG_POSITIONS, FLAG_WEIGHTS, agent):
+def strategy(state, agent):
     current_node = state['curr_pos']
     flag_positions = state['flag_pos']
     flag_weights = state['flag_weight']
