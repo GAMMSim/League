@@ -1,6 +1,6 @@
 import networkx as nx
 
-def check_agent_interaction(ctx, G, agent_params_map, model="kill"):
+def check_agent_interaction(ctx, G, agent_params, model="kill"):
     attackers = []
     defenders = []
     for agent in ctx.agent.create_iter():
@@ -22,7 +22,7 @@ def check_agent_interaction(ctx, G, agent_params_map, model="kill"):
                 continue  # Skip if there is no connection
             
             # Retrieve defender's capture radius (default to 1 if not defined).
-            capture_radius = agent_params_map[defender.name].capture_radius
+            capture_radius = agent_params[defender.name].capture_radius
             if distance <= capture_radius:
                 # An interaction takes place.
                 if model == "kill":
