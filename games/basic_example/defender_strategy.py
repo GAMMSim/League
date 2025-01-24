@@ -1,11 +1,12 @@
 import random
 from utilities import *
 
-def strategy(state, agent):
+def strategy(state):
     current_node = state['curr_pos']
     flag_positions = state['flag_pos']
     flag_weights = state['flag_weight']
-    attacker_positions, defender_positions = extract_sensor_data(state, flag_positions, flag_weights, agent)
+    agent_params = state['agent_params']
+    attacker_positions, defender_positions = extract_sensor_data(state, flag_positions, flag_weights, agent_params)
     
     # Find the attacker that is closest to any flag.
     closest_attacker = None
@@ -14,7 +15,7 @@ def strategy(state, agent):
         for flag in flag_positions:
             try:
                 # Compute the unweighted shortest path length.
-                dist = nx.shortest_path_length(agent.map.graph, source=attacker, target=flag)
+                dist = nx.shortest_path_length(agent_params.map.graph, source=attacker, target=flag)
                 if dist < min_distance:
                     min_distance = dist
                     closest_attacker = attacker
@@ -28,7 +29,7 @@ def strategy(state, agent):
         return
     
     try:
-        next_node = agent.map.shortest_path_to(current_node, closest_attacker, agent.speed)
+        next_node = agent_params.map.shortest_path_to(current_node, closest_attacker, agent_params.speed)
         state['action'] = next_node
     except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
         print(f"No path found from blue agent at node {current_node} to attacker at node {closest_attacker}: {e}")

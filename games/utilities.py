@@ -1,5 +1,6 @@
 # This is the utility file for the basic_example game.
 import networkx as nx
+from dataclasses import dataclass
 
 
 class Graph:
@@ -119,7 +120,13 @@ class Graph:
         if not hasattr(self, 'agent_positions') or not self.agent_positions:
             return []
         return [pos for name, pos in self.agent_positions.items() if team in name]
-        
+  
+@dataclass
+class AgentParams:
+    speed: float
+    capture_radius: float
+    map: Graph  
+          
 def extract_map_sensor_data(state):
     sensor_data = state.get('sensor', {})
     map_sensor = sensor_data.get('map')
@@ -153,13 +160,13 @@ def extract_agent_sensor_data(state):
     sensor_type, agent_info = agent_sensor
     return agent_info
 
-def extract_sensor_data(state, flag_pos, flag_weight, agent):
+def extract_sensor_data(state, flag_pos, flag_weight, agent_params):
     nodes_data, edges_data =  extract_map_sensor_data(state)
     agent_info = extract_agent_sensor_data(state)
-    agent.map.update_networkx_graph(nodes_data, edges_data)
-    agent.map.set_agent_positions(agent_info)
-    agent.map.set_flag_positions(flag_pos)
-    agent.map.set_flag_weights(flag_weight)
-    attacker_positions = agent.map.get_team_positions("attacker")
-    defender_positions = agent.map.get_team_positions("defender")
+    agent_params.map.update_networkx_graph(nodes_data, edges_data)
+    agent_params.map.set_agent_positions(agent_info)
+    agent_params.map.set_flag_positions(flag_pos)
+    agent_params.map.set_flag_weights(flag_weight)
+    attacker_positions = agent_params.map.get_team_positions("attacker")
+    defender_positions = agent_params.map.get_team_positions("defender")
     return attacker_positions, defender_positions

@@ -9,6 +9,5 @@ setup(
         'pygame',
         'shapely',
         'networkx',
-        'osmnx',
     ],
 )        

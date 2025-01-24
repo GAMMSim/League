@@ -2,12 +2,14 @@
 import os
 import sys
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(root_dir)
+sys.path.append(os.path.join(root_dir, "games"))
 # ------------------------------------------------------------------------------
 import gamms
+from gamms.VisualizationEngine import Color
 from config import *
 import attacker_strategy
 import defender_strategy
+import interaction_model
 import pickle
 from utilities import *
 # ------------------------------------------------------------------------------
@@ -45,35 +47,53 @@ ctx.sensor.create_sensor("neighbor", NEIGHBOR_SENSOR)
 # ------------------------------------------------------------------------------
 # Combine and create the agent configurations with auto-assigned teams and default values.
 # ------------------------------------------------------------------------------
+# Dictionary you will pass to create_agent (minus speed, capture_radius, etc. if you want).
 agent_config = {}
+
+# Dictionary of dataclasses, keyed by agent name.
+agent_params_map = {}
 
 # --- Add attacker agents ---
 for name, config in ATTACKER_CONFIG.items():
+    # Create a copy so we don’t mutate the original config.
     agent_entry = config.copy()
-    agent_entry["team"] = "attacker"  # Auto assign team as "attacker"
-    # Set default values if keys are missing.
-    agent_entry.setdefault("speed", ATTACKER_GLOBAL_SPEED)
-    agent_entry.setdefault("capture_radius", ATTACKER_GLOBAL_CAPTURE_RADIUS)
+
+    # Store only the fields you truly need to pass to create_agent(). For example:
+    agent_entry["team"] = "attacker"
     agent_entry.setdefault("sensors", ATTACKER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", ATTACKER_GLOBAL_COLOR)
-    agent_entry["map"] = Graph()
     agent_entry["start_node_id"] = config.get("start_node_id", None)
+
+    # Create an AgentParams object with speed, capture_radius, and agent_map
+    param_obj = AgentParams(
+        speed=config.get("speed", ATTACKER_GLOBAL_SPEED),
+        capture_radius=config.get("capture_radius", ATTACKER_GLOBAL_CAPTURE_RADIUS),
+        map=Graph(),  # or however you build your agent-specific map
+    )
+
+    # Store dataclass in our map
+    agent_params_map[name] = param_obj
+
+    # Store the minimal agent_entry that will go to create_agent
     agent_config[name] = agent_entry
 
 # --- Add defender agents ---
 for name, config in DEFENDER_CONFIG.items():
     agent_entry = config.copy()
-    agent_entry["team"] = "defender"  # Auto assign team as "defender"
-    # Set default values if keys are missing.
-    agent_entry.setdefault("speed", DEFENDER_GLOBAL_SPEED)
-    agent_entry.setdefault("capture_radius", DEFENDER_GLOBAL_CAPTURE_RADIUS)
+    agent_entry["team"] = "defender"
     agent_entry.setdefault("sensors", DEFENDER_GLOBAL_SENSORS)
     agent_entry.setdefault("color", DEFENDER_GLOBAL_COLOR)
-    agent_entry["map"] = Graph()
     agent_entry["start_node_id"] = config.get("start_node_id", None)
-    agent_config[name] = agent_entry
 
-# --- Create agents in the context using the combined configuration ---
+    param_obj = AgentParams(
+        speed=config.get("speed", DEFENDER_GLOBAL_SPEED),
+        capture_radius=config.get("capture_radius", DEFENDER_GLOBAL_CAPTURE_RADIUS),
+        map=Graph(),
+    )
+
+    agent_params_map[name] = param_obj
+    agent_config[name] = agent_entry
+    
 for name, config in agent_config.items():
     ctx.agent.create_agent(name, **config)
 
@@ -98,12 +118,11 @@ print("Strategies set.")
 # Set visualization configurations for the graph and agents.
 # ------------------------------------------------------------------------------
 # Configure the graph visualization dimensions.
-graph_vis_config = {"width": 1980, "height": 1080}
+graph_vis_config = {"width": 1980, "height": 1080, "draw_id": DRAW_NODE_ID, "node_color": Color.Black, "edge_color": Color.Gray}
 ctx.visual.set_graph_visual(**graph_vis_config)
 
 # Set the simulation time constant (affects speed of animations).
 ctx.visual._sim_time_constant = GAME_SPEED
-ctx.visual.draw_node_id = DRAW_NODE_ID
 
 # For each agent, configure its visualization using the agent configuration details.
 for name, config in agent_config.items():
@@ -140,58 +159,6 @@ for index, flag_node_id in enumerate(FLAG_POSITIONS):
     ctx.visual.add_artist(f"flag_{index}", flag_data)
 
 print("Flags initialized.")
-
-# ------------------------------------------------------------------------------
-# Define Agent Interaction Model
-# ------------------------------------------------------------------------------
-def check_agent_interaction(ctx, G, model="kill"):
-    attackers = []
-    defenders = []
-    for agent in ctx.agent.create_iter():
-        team = agent.team
-        if team == "attacker":
-            attackers.append(agent)
-        elif team == "defender":
-            defenders.append(agent)
-    
-    # Check each attacker against each defender.
-    for attacker in attackers:
-        for defender in defenders:
-            try:
-                # Compute the shortest path distance between the attacker and defender.
-                distance = nx.shortest_path_length(G,
-                                                   source=attacker.current_node_id,
-                                                   target=defender.current_node_id)
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                continue  # Skip if there is no connection
-            
-            # Retrieve defender's capture radius (default to 1 if not defined).
-            capture_radius = getattr(defender, 'capture_radius', 0)
-            if distance <= capture_radius:
-                # An interaction takes place.
-                if model == "kill":
-                    # Defender kills the attacker.
-                    print(f"[Interaction: kill] Defender {defender.name} kills attacker {attacker.name}.")
-                    ctx.agent.delete_agent(attacker.name)
-                elif model == "respawn":
-                    # Attacker respawns.
-                    print(f"[Interaction: respawn] Attacker {attacker.name} respawns due to interaction with defender {defender.name}.")
-                    attacker.prev_node_id = attacker.current_node_id
-                    attacker.current_node_id = attacker.start_node_id
-                elif model == "both_kill":
-                    # Both agents are killed (set to inactive).
-                    print(f"[Interaction: both_kill] Both attacker {attacker.name} and defender {defender.name} are killed.")
-                    ctx.agent.delete_agent(attacker.name)
-                    ctx.agent.delete_agent(defender.name)
-                elif model == "both_respawn":
-                    # Both agents respawn (reset to start positions and become active).
-                    print(f"[Interaction: both_respawn] Both attacker {attacker.name} and defender {defender.name} respawn.")
-                    attacker.prev_node_id = attacker.current_node_id
-                    attacker.current_node_id = attacker.start_node_id
-                    defender.prev_node_id = defender.current_node_id
-                    defender.current_node_id = defender.start_node_id
-                else:
-                    print(f"Unknown interaction model: {model}")
                     
 # ------------------------------------------------------------------------------
 # Run the game
@@ -202,7 +169,8 @@ while not ctx.is_terminated():
             state = agent.get_state()
             state["flag_pos"] = FLAG_POSITIONS
             state["flag_weight"] = FLAG_WEIGHTS
-            agent.strategy(state, agent)
+            state["agent_params"] = agent_params_map[agent.name]
+            agent.strategy(state)
             agent.set_state()
         else:
             state = agent.get_state()
@@ -211,6 +179,6 @@ while not ctx.is_terminated():
             agent.set_state()
 
     ctx.visual.simulate()
-    check_agent_interaction(ctx, G, INTERACTION_MODEL)
+    interaction_model.check_agent_interaction(ctx, G, agent_params_map, INTERACTION_MODEL)
     
 # To kill the game, use control + c, or customize the termination condition in the while loop.
