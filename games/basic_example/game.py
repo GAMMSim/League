@@ -1,12 +1,12 @@
-# The path should remain on top of the file to ensure the correct import path.
+# ------------------------------------------------------------------------------
+# IMPORTS (Do not modify)
+# ------------------------------------------------------------------------------
 import os
 import sys
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# If root directory does not end with "games", then add it to the path.
 if not root_dir.endswith("games"):
     root_dir = os.path.join(root_dir, "games")
 sys.path.append(root_dir)
-# ------------------------------------------------------------------------------
 import gamms
 from gamms.VisualizationEngine import Color
 from config import *
@@ -15,13 +15,14 @@ import defender_strategy
 import interaction_model
 import pickle
 from utilities import *
+
 # ------------------------------------------------------------------------------
-# Initialize the game context with the selected visualization engine.
+# Initialize the game context
 # ------------------------------------------------------------------------------
 ctx = gamms.create_context(vis_engine=VISUALIZATION_ENGINE)
 
 # ------------------------------------------------------------------------------
-# Load or Create Graph
+# Load and Create Graph
 # ------------------------------------------------------------------------------
 if os.path.exists(GRAPH_PATH):
     # If the graph file exists, load it using pickle.
@@ -181,7 +182,7 @@ while not ctx.is_terminated():
             state["action"] = node
             agent.set_state()
             
-    # Check if attackers are all caputured
+    # Check if attackers are all captured
     still_has_attackers = any(agent.team == "attacker" for agent in ctx.agent.create_iter())
     if not still_has_attackers:
         print("All attackers have been captured")

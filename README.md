@@ -42,7 +42,7 @@ The `gamms` folder contains the core library and **should not be modified**. The
 
 ---
 
-# How to Use
+## How to Use
 
 ### Config.py
 
@@ -169,6 +169,149 @@ RESOLUTION = 200.0
 - **Defender Configuration**
 
   Defenders use the same configuration structure as attackers.
+
+### game.py
+
+The `game.py` file is the main script that runs the game simulation. It orchestrates all game components and manages the game loop.
+
+#### 📁 Structure Overview
+
+- Imports
+- Game initailization
+- Main game loop
+
+🔧 Key Components
+
+1. **Environment Setup**
+   ```python
+   ctx, G = initialize_game_context(
+       VISUALIZATION_ENGINE,
+       GRAPH_PATH,
+       LOCATION,
+       RESOLUTION
+   )
+   ```
+   - Creates the game context and loads/generates the graph
+   - Parameters are imported from `config.py`
+   - Returns both the context (`ctx`) and graph (`G`)
+
+2. **Sensor Configuration**
+
+   Sets up the three main sensor types for environment perception
+
+   ```python
+   ctx.sensor.create_sensor("map", MAP_SENSOR)
+   ctx.sensor.create_sensor("agent", AGENT_SENSOR)
+   ctx.sensor.create_sensor("neighbor", NEIGHBOR_SENSOR)
+   ```
+
+3. **Agent Configuration**
+   ```python
+   agent_config, agent_params_map = configure_agents(
+       ctx,
+       ATTACKER_CONFIG,
+       DEFENDER_CONFIG,
+       {...}  # Global parameters
+   )
+   ```
+   - Configures both attackers and defenders
+   - Applies both global and individual parameters
+   - Returns configuration and parameter mapping for all agents
+
+4. **Strategy Assignment**
+   ```python
+   assign_strategies(ctx, agent_config, attacker_strategy, defender_strategy)
+   ```
+   - Links strategy implementations to agents
+   - Strategies are imported from `attacker_strategy.py` and `defender_strategy.py`
+
+5. **Visualization Setup**
+   ```python
+   configure_visualization(
+       ctx,
+       agent_config,
+       {...}  # Visual parameters
+   )
+   ```
+   - Configures the game's visual representation
+   - Sets window size, colors, and display options
+
+6. **Flag Initialization**
+   ```python
+   initialize_flags(ctx, FLAG_POSITIONS, FLAG_SIZE, FLAG_COLOR)
+   ```
+   - Places flags in the game environment
+   - Uses parameters from `config.py`
+
+#### 🎮 Main Game Loop
+
+The main game loop runs continuously until termination conditions are met. Below is a detailed breakdown of an example:
+
+##### Game Loop Example
+
+```python
+# Main game loop
+while not ctx.is_terminated():
+    # 1. Process each agent's turn
+    for agent in ctx.agent.create_iter():
+        # Get current state
+        state = agent.get_state()
+        
+        # Add custom variables to state
+        state.update({
+            "flag_pos": FLAG_POSITIONS,      # List of flag positions
+            "flag_weight": FLAG_WEIGHTS,     # Value of each flag
+            "agent_params": agent_params_map[agent.name],  # Agent-specific parameters
+            "custom_var": your_custom_data   # Add your own variables here
+        })
+
+        # Execute strategy or handle human input
+        if agent.strategy is not None:
+            agent.strategy(state)  # AI-controlled agent
+        else:
+            node = ctx.visual.human_input(agent.name, state)  # Human-controlled agent
+            state["action"] = node
+        
+        agent.set_state()
+
+    # 2. Check termination conditions
+    if termination_condition:
+        print("Game ended due to:", reason)
+        break
+
+    # 3. Update simulation
+    ctx.visual.simulate()
+    interaction_model.check_agent_interaction(ctx, G, agent_params_map, INTERACTION_MODEL)
+```
+
+##### State Management
+Add any variables your strategy needs to the state dictionary:
+```python
+# Example: Adding custom data to state
+state.update({
+    "enemy_positions": get_enemy_positions(),
+    "resources": available_resources,
+    "time_left": game_timer
+})
+```
+
+##### Termination Examples
+```python
+# Victory condition: All attackers captured
+if not any(agent.team == "attacker" for agent in ctx.agent.create_iter()):
+    print("Defenders win!")
+    break
+
+# Time limit reached
+if game_timer <= 0:
+    print("Time's up!")
+    break
+
+# Score threshold reached
+if team_score >= WIN_SCORE:
+    print("Score threshold reached!")
+    break
+```
 
 ---
 
