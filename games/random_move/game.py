@@ -2,7 +2,10 @@
 import os
 import sys
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(os.path.join(root_dir, "games"))
+# If root directory does not end with "games", then add it to the path.
+if not root_dir.endswith("games"):
+    root_dir = os.path.join(root_dir, "games")
+sys.path.append(root_dir)
 # ------------------------------------------------------------------------------
 import gamms
 from gamms.VisualizationEngine import Color
