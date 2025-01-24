@@ -1,60 +1,179 @@
-# GAMMS v0.1
+## Before Use
 
-## Requirements
+### Requirements
 
-Python 3.7+ installed with pip.
+Ensure your platform has **Python 3.7+** installed along with `pip`.
 
-## Installation
+### Installation
 
-Clone or download the github repository.
+1. Clone or download the GitHub repositories `gamms` and `games`.
+2. Navigate to the `gamms` folder and run the following command to install the `gamms` library:
+   ```bash
+   pip install .
+   ```
 
-Go to the cloned directory and run
+### File Structure
 
-```bash
-pip install .
-```
-
-to install gamms.
-
-For debug mode,
+The `gamms` folder contains the core library and **should not be modified**. The `games` folder contains examples and utilities. The expected structure of the `games` folder is as follows:
 
 ```bash
-pip install -e .
+.
+├── README.md
+├── examples
+│   ├── basic_example
+│   │   ├── attacker_strategy.py
+│   │   ├── config.py
+│   │   ├── defender_strategy.py
+│   │   ├── interaction_model.py
+│   │   └── game.py
+│   └── random_move
+│       ├── attacker_strategy.py
+│       ├── config.py
+│       ├── defender_strategy.py
+│       ├── interaction_model.py
+│       └── game.py
+└── utilities.py
 ```
 
-## Understanding the example
+### Notes:
 
-There are three main components to the game setup:
-1. Config file (`config.py`)
-2. Graph Creation (`create_graph.py`)
-3. Game File (`game.py`)
+- ✅ Ensure the `utilities.py` file is in the root of the `games` folder.
+- ⚠️ If you encounter errors like `utilities.py not found`, verify that your root directory is correctly set to `.../games`.
 
-### Config File
+---
 
-The config file contains all the parameters for the game. It defines the sensors, agents and how individual agents are rendered.
+# How to Use
 
-As the config file itself is a python file, it is possible to create multiple layers of config files as well as separate them into separate parts as required. It only needs to be imported in other python files.
+### Config.py
 
-In the example, the config file first defines that it wants to use PYGAME for visualization. Code completion itself can be used to see other types. Right now, the only option is PYGAME and NO_VIS (no visualization).
+The `config.py` file contains the customizable parameters for the game. Below are the sections and their usage:
 
-Following that, the file defines the various sensors that need to be created. It is a simple dictionary structure, right now only requiring the type of the sensor. The three types used are NEIGHBOR, AGENT, MAP -- provides the neighboring nodes, information about all agent positions, complete map information. Type hints directly can be used to see the various types.
+#### 🎨 Color Parameters
 
-The agent configuration contains the team id as meta data, the sensors attached to the individual agents, and the start node id for them.
+```python
+RED = "red"       # The color red
+BLUE = "blue"      # The color blue
+GREEN = "green"     # The color green
+BLACK = "black"     # The color black
+```
 
-Remaning part is only for defining the window size and agent rendering information for the visualization engine.
+These color constants are used for defining agent colors, flag colors, and other visual elements. Ensure the colors are defined in `gamms/VisualizationEngine/__init__.py` and written in **lowercase**.
 
-### Graph Creation
+#### 🖥️ Simulation Interface Parameters
 
-This file is there for completeness. It is a vanialla example of how to convert a real world location into a networkx graph and dump it.
+```python
+WINDOW_SIZE = (1980, 1080)
+GAME_SPEED = 1
+DRAW_NODE_ID = True
+VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
+```
 
-### Game File
+- `WINDOW_SIZE (tuple)`: Specifies the game window dimensions in pixels.
+- `GAME_SPEED (float)`: Controls the simulation speed. Higher values make the game slower.
+- `DRAW_NODE_ID (bool)`: Indicates whether to display node IDs on the graph.
+  > **Warning**: Enabling this significantly reduces rendering performance.
+- `VISUALIZATION_ENGINE (gamms.visual.Engine)`: Specifies the visualization engine. Use `visual.Engine.NO_VIS` for a dry run without rendering.
 
-Any game starts with first creating a gamms context. The example file shows how to attach a networkx graph to the context (internally its no longer a networkx graph). Next step is to iterate over the sensor and agent config, and load them in the context.
+#### 🗺️ Graph Parameters
 
-Do a similar run over the visual setup.
+```python
+GRAPH_PATH = "graph.pkl"
+LOCATION = "West Point, New York, USA"
+RESOLUTION = 200.0
+```
 
-Game rules can now be defined as simple python function that take the context as its argument and checks for something in the game.
+- `GRAPH_PATH (str)`: Path to the graph file, which must be a `.pkl` file.
+  > **Note**: If the file does not exist, the program will generate it using the following properties:
+  - `LOCATION (str)`: A real-world location to base the graph on.
+  - `RESOLUTION (float)`: Specifies graph resolution; higher values result in lower node density.
 
-Last step is the actual loop where you run the game until the context is terminated (termination condition defined by rules).
+#### 🎮 Game Parameters
 
-Anything that needs to be logged can be directly logged in the loop and saved at any point.
+1. **Sensors**
+
+   Available sensor types:
+
+   ```python
+   MAP_SENSOR = gamms.sensor.SensorType.MAP
+   AGENT_SENSOR = gamms.sensor.SensorType.AGENT
+   NEIGHBOR_SENSOR = gamms.sensor.SensorType.NEIGHBOR
+   ```
+
+   - `MAP_SENSOR`: Senses all nodes and edges, excluding agent and flag data.
+   - `AGENT_SENSOR`: Senses the names and positions of all agents, excluding their properties (e.g., speed, team).
+   - `NEIGHBOR_SENSOR`: Senses the neighboring nodes of the agent's current position.
+
+2. **Flags**
+
+   ```python
+   FLAG_POSITIONS = [50, 51, 52]  # Flag positions
+   FLAG_WEIGHTS = [1, 1, 1]       # Values of each flag
+   FLAG_COLOR = GREEN             # Color of the flags
+   FLAG_SIZE = 8
+   ```
+
+3. **Interaction Model**
+
+   ```python
+   INTERACTION_MODEL = "kill"
+   ```
+
+   Determines how agents interact with each other. Available options are:
+
+   | Interaction Type | Description                                                  |
+   | ---------------- | ------------------------------------------------------------ |
+   | `kill`           | The attacker is eliminated upon capture.                     |
+   | `respawn`        | The attacker respawns at its starting position upon capture. |
+   | `both_kill`      | Both attacker and defender are eliminated upon capture.      |
+   | `both_respawn`   | Both attacker and defender respawn at their starting positions upon capture. |
+
+   > This parameter is passed to the `check_agent_interaction` function in `game.py`. You can create custom interaction models by modifying this function. For details, refer to the [Agent Interaction](#Agent-Interaction) section.
+
+#### 🕹️ Agent Parameters
+
+- **Global Agent Size**
+
+  ```python
+  GLOBAL_AGENT_SIZE = 8
+  ```
+
+- **Attacker Configuration**
+
+  Global parameters:
+
+  ```python
+  ATTACKER_GLOBAL_SPEED = 1
+  ATTACKER_GLOBAL_CAPTURE_RADIUS = 0
+  ATTACKER_GLOBAL_SENSORS = ["map", "agent", "neighbor"]
+  ATTACKER_GLOBAL_COLOR = RED
+  ```
+
+  Individual parameters:
+
+  ```python
+  ATTACKER_CONFIG = {
+      "attacker_0": {
+          "speed": 1,
+          "capture_radius": 0,
+          "sensors": ["map", "agent", "neighbor"],
+          "color": RED,
+          "start_node_id": 0,
+      },
+      "attacker_1": {"start_node_id": 1},
+      ...
+  }
+  ```
+
+  Individual settings override global parameters for the specified agent.
+
+- **Defender Configuration**
+
+  Defenders use the same configuration structure as attackers.
+
+---
+
+### 🔗 Additional Resources
+
+---
+
+This document is a work in progress. If you find missing information or areas for improvement, feel free to contribute! 🙌
