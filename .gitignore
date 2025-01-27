@@ -11,6 +11,9 @@ cache/
 
 # Self defined libraries
 gamms/
+setup.py
+mkdocs.yml
+docs/
 
 # C extensions
 *.so
