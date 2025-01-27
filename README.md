@@ -5,7 +5,7 @@
 ⚠️ Broken links will be fixed soon.
 
 - [Quick Start Guide](#-quick-start-guide)
-- [Requirements](#-requirements)
+- [Requirements](#%EF%B8%8F-requirements)
 - [Installation](#-installation)
 - [File Structure](#-file-structure)
 - [How to Use](#-how-to-use)
