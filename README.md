@@ -34,29 +34,79 @@
 
 ## 🚀 Quick Start Guide
 
-Follow these simple steps to get the game running:
+1. **Set Up Environment**  
 
-1. **Setup**: Install Python 3.7+ and clone both `gamms` and `games` repositories
-2. **Installation**: Run `pip install .` in the `gamms` folder
-3. **Basic Configuration**: Create or modify your `config.py` with game parameters
-4. **Strategy Design**: Define your agent strategies in separate files
-5. **Launch**: Run `game.py` from the proper root directory
-
-Want to dive deeper? Check out the [Advanced Usage](#advanced-usage) section!
-
-## ⚙️ Requirements
-
-- Python 3.7+
-- pip package manager
-
-## 📥 Installation
-
-1. Clone/download `gamms` and `games` repositories
-2. Navigate to `gamms` folder
-3. Run:
-   ```bash
-   pip install .
+   ```bash  
+   # Clone repositories  
+   git clone https://github.com/GAMMSim/gamms.git  
+   git clone https://github.com/GAMMSim/League.git  
+   
+   # Create and activate a virtual environment  
+   cd gamms  
+   python -m venv venv  
+   source venv/bin/activate    # Mac/Linux: venv\Scripts\activate for Windows  
    ```
+
+2. **Install Gamms**  
+   ```bash  
+   pip install .  # Installs Gamms into the virtual environment  
+   ```
+
+3. **Run the Game**  
+
+   Navigate to `League/games/examples`, pick any example folder or create you own folder. Inside the example folder, run
+
+   ```bash  
+   python game.py  
+   ```
+
+**Done!** For advanced setup, see [Installation Details](#-installation).  
+
+---
+
+## ⚙️ Requirements  
+- Python 3.7+  
+- `git` and `pip`  
+
+---
+
+## 📥 Installation  
+### Detailed Steps for Isolation and Dependency Management  
+
+1. **Virtual Environment**  
+   Create a virtual environment to isolate dependencies:  
+
+   ```bash  
+   python -m venv venv  
+   ```
+   - Activate:  
+     ```bash  
+     # Mac/Linux  
+     source venv/bin/activate  
+     # Windows  
+     venv\Scripts\activate  
+     ```
+
+2. **Install Gamms**  
+   Navigate to the cloned `gamms` folder and install:  
+
+   ```bash  
+   pip install .  # Installs Gamms and dependencies into the venv  
+   ```
+
+3. **Verify Installation**  
+   ```bash  
+   python -c "import gamms; print('Success! Version:', gamms.__version__)"  
+   ```
+
+   ⚠️ For more **detail** or **troubleshooting**, visit the `gamms` library's office documentation here: [Visit the Quick Start Guide](https://gammsim.github.io/gamms/start/).
+
+4. **Configure and Run**  
+
+   - Navigate to `League/games`.
+   - Open an example folder, or create your own example folder. The structure of the files can be found in [File Structure](#-file-structure).
+
+   - Follow the instructions in [How to Use](#-how-to-use).
 
 ## 📁 File Structure
 
