@@ -1,9 +1,6 @@
 # README
 
 ## 📑 Table of Contents
-
-⚠️ Broken links will be fixed soon.
-
 - [Quick Start Guide](#-quick-start-guide)
 - [Requirements](#%EF%B8%8F-requirements)
 - [Installation](#-installation)
@@ -15,24 +12,24 @@
   - [Step 4: Game Loop & Termination](#step-4-game-loop--termination)
   - [Step 5: Run the Game](#step-5-run-the-game)
 - [Advanced Usage](#-advanced-usage)
-  - [Config.py](#-configpy)
+  - [Config.py](#%EF%B8%8F-configpy)
     - [Color Parameters](#-color-parameters)
-    - [Simulation Interface Parameters](#-simulation-interface-parameters)
-    - [Graph Parameters](#-graph-parameters)
+    - [Simulation Interface Parameters](#%EF%B8%8F-simulation-interface-parameters)
+    - [Graph Parameters](#%EF%B8%8F-graph-parameters)
     - [Game Parameters](#-game-parameters)
-    - [Agent Parameters](#-agent-parameters)
+    - [Agent Parameters](#%EF%B8%8F-agent-parameters)
   - [Game.py](#-gamepy)
-    - [Structure Overview](#structure-overview)
-    - [Main Game Loop](#main-game-loop)
+    - [Structure Overview](#-structure-overview)
+    - [Main Game Loop](#-main-game-loop)
   - [Strategy](#-strategy)
     - [Overview](#-overview)
     - [Example Strategy](#-example-strategy)
     - [Key Concepts](#-key-concepts)
   - [Agent Interaction](#-agent-interaction)
     - [Managing Agents](#-managing-agents-ctx)
-    - [Agent Parameters](#-agent-parameters-1)
-    - [Graph Operations](#graph-operations)
-    - [Common Operations](#common-operations)
+    - [Agent Parameters](#-agent-parameters-agent_params)
+    - [Graph Operations](#%EF%B8%8F-graph-operations-g)
+    - [Common Operations](#-common-operations)
 - [Additional Resources](#-additional-resources)
 
 ## 🚀 Quick Start Guide
