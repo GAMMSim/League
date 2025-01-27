@@ -9,6 +9,8 @@ cache/
 .DS_Store
 *.pkl
 
+# Self defined libraries
+gamms/
 
 # C extensions
 *.so
