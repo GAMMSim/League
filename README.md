@@ -1,8 +1,6 @@
 # README
 
 ## 📑 Table of Contents
-- [README](#readme)
-  - [📑 Table of Contents](#-table-of-contents)
   - [🚀 Quick Start Guide](#-quick-start-guide)
     - [⚙️ Requirements](#️-requirements)
     - [📥 Installation](#-installation)
@@ -13,7 +11,7 @@
     - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
     - [Step 4: Game Loop \& Termination](#step-4-game-loop--termination)
     - [Step 5: Run the Game](#step-5-run-the-game)
-- [🔧 Advanced Usage](#-advanced-usage)
+  - [🔧 Advanced Usage](#-advanced-usage)
   - [⚙️ Config.py](#️-configpy)
     - [🎨 Color Parameters](#-color-parameters)
     - [🖥️ Simulation Interface Parameters](#️-simulation-interface-parameters)
@@ -179,13 +177,13 @@ Execute from the correct directory:
 python game.py
 ```
 
-# 🔧 Advanced Usage
+## 🔧 Advanced Usage
 
-## ⚙️ Config.py
+### ⚙️ Config.py
 
 The `config.py` file contains all customizable parameters for your game setup.
 
-### 🎨 Color Parameters
+#### 🎨 Color Parameters
 ```python
 RED = "red"       # The color red
 BLUE = "blue"     # The color blue
@@ -194,7 +192,7 @@ BLACK = "black"   # The color black
 ```
 These color constants are used for defining agent colors, flag colors, and other visual elements. Ensure the colors are defined in `gamms/VisualizationEngine/__init__.py` and written in **lowercase**.
 
-### 🖥️ Simulation Interface Parameters
+#### 🖥️ Simulation Interface Parameters
 ```python
 WINDOW_SIZE = (1980, 1080)
 GAME_SPEED = 1
@@ -210,7 +208,7 @@ VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
   > Enabling node IDs significantly reduces rendering performance
 - `VISUALIZATION_ENGINE`: Choose visualization engine type. Use `visual.Engine.NO_VIS` for a dry run without rendering
 
-### 🗺️ Graph Parameters
+#### 🗺️ Graph Parameters
 ```python
 GRAPH_PATH = "graph.pkl"
 LOCATION = "West Point, New York, USA"
@@ -224,9 +222,9 @@ RESOLUTION = 200.0
   - `LOCATION (str)`: Real-world location to base the graph on
   - `RESOLUTION (float)`: Graph resolution; higher values mean lower node density
 
-### 🎮 Game Parameters
+#### 🎮 Game Parameters
 
-#### Sensors
+##### Sensors
 Available sensor types:
 ```python
 MAP_SENSOR = gamms.sensor.SensorType.MAP
@@ -238,7 +236,7 @@ NEIGHBOR_SENSOR = gamms.sensor.SensorType.NEIGHBOR
 - `AGENT_SENSOR`: Senses names and positions of all agents, excluding their properties
 - `NEIGHBOR_SENSOR`: Senses neighboring nodes of agent's current position
 
-#### Flags
+##### Flags
 ```python
 FLAG_POSITIONS = [50, 51, 52]  # Flag positions
 FLAG_WEIGHTS = [1, 1, 1]       # Values of each flag
@@ -246,7 +244,7 @@ FLAG_COLOR = GREEN             # Color of the flags
 FLAG_SIZE = 8
 ```
 
-#### Interaction Model
+##### Interaction Model
 ```python
 INTERACTION_MODEL = "kill"
 ```
@@ -260,14 +258,14 @@ INTERACTION_MODEL = "kill"
 
 > This parameter is passed to `check_agent_interaction` function in `game.py`. Create custom interaction models by modifying this function. See [Agent Interaction](#agent-interaction) section for details.
 
-### 🕹️ Agent Parameters
+#### 🕹️ Agent Parameters
 
-#### Global Agent Size
+##### Global Agent Size
 ```python
 GLOBAL_AGENT_SIZE = 8
 ```
 
-#### Attacker Configuration
+##### Attacker Configuration
 ```python
 # Global parameters
 ATTACKER_GLOBAL_SPEED = 1
@@ -289,11 +287,11 @@ ATTACKER_CONFIG = {
 ```
 Individual settings override global parameters for the specified agent. Defenders use the same configuration structure.
 
-## 🎲 Game.py
+### 🎲 Game.py
 
 The `game.py` file is the main script that runs the game simulation. It orchestrates all game components and manages the game loop.
 
-### 📁 Structure Overview
+#### 📁 Structure Overview
 
 1. **Environment Setup**
 ```python
@@ -354,9 +352,9 @@ initialize_flags(ctx, FLAG_POSITIONS, FLAG_SIZE, FLAG_COLOR)
 - Places flags in game environment
 - Uses parameters from `config.py`
 
-### 🎮 Main Game Loop
+#### 🎮 Main Game Loop
 
-#### Game Loop Example
+##### Game Loop Example
 ```python
 while not ctx.is_terminated():
     # 1. Process each agent's turn
@@ -390,7 +388,7 @@ while not ctx.is_terminated():
     interaction_model.check_agent_interaction(ctx, G, agent_params_map, INTERACTION_MODEL)
 ```
 
-#### State Management
+##### State Management
 Add any variables your strategy needs to the state dictionary:
 ```python
 # Example: Adding custom data to state
@@ -401,7 +399,7 @@ state.update({
 })
 ```
 
-#### Termination Examples
+##### Termination Examples
 ```python
 # Victory condition: All attackers captured
 if not any(agent.team == "attacker" for agent in ctx.agent.create_iter()):
@@ -419,14 +417,14 @@ if team_score >= WIN_SCORE:
     break
 ```
 
-## 🧠 Strategy
+### 🧠 Strategy
 
-### 📝 Overview
+#### 📝 Overview
 Strategies define how agents behave in the game. By customizing strategies, you can control the movement and actions of both attackers and defenders. We'll use the provided `defender_strategy.py` as examples to explain key concepts in developing your own strategies.
 
 Note: Other examples can be found in `games/basic_example` and `game/random_move`.
 
-### 🎯 Example Strategy
+#### 🎯 Example Strategy
 ```python
 def strategy(state):
     """
@@ -459,9 +457,9 @@ def strategy(state):
                 continue
 ```
 
-### 🔑 Key Concepts
+#### 🔑 Key Concepts
 
-#### 1. State Dictionary Access
+##### 1. State Dictionary Access
 ```python
 # Basic state information
 current_node = state['curr_pos']               # Current position
@@ -470,7 +468,7 @@ flag_weights = state['flag_weight']            # Flag values
 agent_params = state['agent_params']           # Agent parameters
 ```
 
-#### 2. Sensor Data Usage
+##### 2. Sensor Data Usage
 ```python
 # Get agent positions
 attacker_positions, defender_positions = extract_sensor_data(
@@ -481,7 +479,7 @@ attacker_positions, defender_positions = extract_sensor_data(
 neighbor_data = extract_neighbor_sensor_data(state)
 ```
 
-#### 3. Map Navigation
+##### 3. Map Navigation
 ```python
 # Access map graph
 graph = agent_params.map.graph
@@ -498,9 +496,9 @@ next_node = agent_params.map.shortest_path_to(
 state['action'] = next_node
 ```
 
-## 🤝 Agent Interaction
+### 🤝 Agent Interaction
 
-### 🎮 Managing Agents (`ctx`)
+#### 🎮 Managing Agents (`ctx`)
 ```python
 # Delete an agent
 ctx.agent.delete_agent(agent_name)
@@ -516,7 +514,7 @@ agent.start_node_id    # Starting position
 agent.team            # "attacker" or "defender"
 ```
 
-### 📊 Agent Parameters (`agent_params`)
+#### 📊 Agent Parameters (`agent_params`)
 ```python
 # Access agent-specific parameters
 capture_radius = agent_params[agent_name].capture_radius
@@ -527,7 +525,7 @@ if distance <= agent_params[defender.name].capture_radius:
     handle_capture()
 ```
 
-### 🗺️ Graph Operations (`G`)
+#### 🗺️ Graph Operations (`G`)
 ```python
 # Calculate distance between agents
 try:
@@ -540,9 +538,9 @@ except nx.NetworkXNoPath:
     print("No path exists")
 ```
 
-### 🔄 Common Operations
+#### 🔄 Common Operations
 
-#### 🗑️ Removing Agents
+##### 🗑️ Removing Agents
 ```python
 # Remove an agent permanently
 ctx.agent.delete_agent(agent.name)
@@ -551,7 +549,7 @@ ctx.agent.delete_agent(agent.name)
 agents_list.remove(agent)
 ```
 
-#### 🔄 Respawning Agents
+##### 🔄 Respawning Agents
 ```python
 # Reset agent to starting position
 agent.prev_node_id = agent.current_node_id    # Store current as previous
@@ -564,7 +562,7 @@ defender.current_node_id = defender.start_node_id
 
 ---
 
-## 🔗 Additional Resources
+### 🔗 Additional Resources
 [Documentation and examples continue to be updated] 
 
 This document is a work in progress. If you find missing information or areas for improvement, please submit an issue!
