@@ -1,112 +1,125 @@
 # README
 
 ## 📑 Table of Contents
-- [Quick Start Guide](#-quick-start-guide)
-- [Requirements](#%EF%B8%8F-requirements)
-- [Installation](#-installation)
-- [File Structure](#-file-structure)
-- [How to Use](#-how-to-use)
-  - [Step 1: Create Config File](#step-1-create-config-file)
-  - [Step 2: Define Strategies](#step-2-define-strategies)
-  - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
-  - [Step 4: Game Loop & Termination](#step-4-game-loop--termination)
-  - [Step 5: Run the Game](#step-5-run-the-game)
-- [Advanced Usage](#-advanced-usage)
-  - [Config.py](#%EF%B8%8F-configpy)
-    - [Color Parameters](#-color-parameters)
-    - [Simulation Interface Parameters](#%EF%B8%8F-simulation-interface-parameters)
-    - [Graph Parameters](#%EF%B8%8F-graph-parameters)
-    - [Game Parameters](#-game-parameters)
-    - [Agent Parameters](#%EF%B8%8F-agent-parameters)
-  - [Game.py](#-gamepy)
-    - [Structure Overview](#-structure-overview)
-    - [Main Game Loop](#-main-game-loop)
-  - [Strategy](#-strategy)
-    - [Overview](#-overview)
-    - [Example Strategy](#-example-strategy)
-    - [Key Concepts](#-key-concepts)
-  - [Agent Interaction](#-agent-interaction)
-    - [Managing Agents](#-managing-agents-ctx)
-    - [Agent Parameters](#-agent-parameters-agent_params)
-    - [Graph Operations](#%EF%B8%8F-graph-operations-g)
-    - [Common Operations](#-common-operations)
-- [Additional Resources](#-additional-resources)
+- [README](#readme)
+  - [📑 Table of Contents](#-table-of-contents)
+  - [🚀 Quick Start Guide](#-quick-start-guide)
+    - [⚙️ Requirements](#️-requirements)
+    - [📥 Installation](#-installation)
+  - [📁 File Structure](#-file-structure)
+  - [🎯 How to Use](#-how-to-use)
+    - [Step 1: Create Config File](#step-1-create-config-file)
+    - [Step 2: Define Strategies](#step-2-define-strategies)
+    - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
+    - [Step 4: Game Loop \& Termination](#step-4-game-loop--termination)
+    - [Step 5: Run the Game](#step-5-run-the-game)
+- [🔧 Advanced Usage](#-advanced-usage)
+  - [⚙️ Config.py](#️-configpy)
+    - [🎨 Color Parameters](#-color-parameters)
+    - [🖥️ Simulation Interface Parameters](#️-simulation-interface-parameters)
+    - [🗺️ Graph Parameters](#️-graph-parameters)
+    - [🎮 Game Parameters](#-game-parameters)
+      - [Sensors](#sensors)
+      - [Flags](#flags)
+      - [Interaction Model](#interaction-model)
+    - [🕹️ Agent Parameters](#️-agent-parameters)
+  - [🎲 Game.py](#-gamepy)
+    - [📁 Structure Overview](#-structure-overview)
+    - [🎮 Main Game Loop](#-main-game-loop)
+      - [Game Loop Example](#game-loop-example)
+      - [State Management](#state-management)
+      - [Termination Examples](#termination-examples)
+  - [🧠 Strategy](#-strategy)
+    - [📝 Overview](#-overview)
+    - [🎯 Example Strategy](#-example-strategy)
+    - [🔑 Key Concepts](#-key-concepts)
+  - [🤝 Agent Interaction](#-agent-interaction)
+    - [🎮 Managing Agents (`ctx`)](#-managing-agents-ctx)
+    - [📊 Agent Parameters (`agent_params`)](#-agent-parameters-agent_params)
+    - [🗺️ Graph Operations (`G`)](#️-graph-operations-g)
+    - [🔄 Common Operations](#-common-operations)
+      - [🗑️ Removing Agents](#️-removing-agents)
+      - [🔄 Respawning Agents](#-respawning-agents)
+  - [🔗 Additional Resources](#-additional-resources)
 
 ## 🚀 Quick Start Guide
 
-1. **Set Up Environment**  
+### ⚙️ Requirements  
 
-   ```bash  
-   # Clone repositories  
-   git clone https://github.com/GAMMSim/gamms.git  
-   git clone https://github.com/GAMMSim/League.git  
-   
-   # Create and activate a virtual environment  
-   cd gamms  
-   python -m venv venv  
-   source venv/bin/activate    # Mac/Linux: venv\Scripts\activate for Windows  
-   ```
-
-2. **Install Gamms**  
-   ```bash  
-   pip install .  # Installs Gamms into the virtual environment  
-   ```
-
-3. **Run the Game**  
-
-   Navigate to `League/games/examples`, pick any example folder or create you own folder. Inside the example folder, run
-
-   ```bash  
-   python game.py  
-   ```
-
-**Done!** For advanced setup, see [Installation Details](#-installation).  
-
----
-
-## ⚙️ Requirements  
 - Python 3.7+  
 - `git` and `pip`  
 
----
+### 📥 Installation  
 
-## 📥 Installation  
-### Detailed Steps for Isolation and Dependency Management  
+#### 1. Set Up Project Folder and Virtual Environment
 
-1. **Virtual Environment**  
-   Create a virtual environment to isolate dependencies:  
+> 💡 **Before You Begin**
+>
+> Please always refer to the [**Installation and Setup**](https://gammsim.github.io/gamms/start/#installation-and-setup) section in the official gamms documentation for the newest intallation guide.
 
-   ```bash  
-   python -m venv venv  
-   ```
-   - Activate:  
-     ```bash  
-     # Mac/Linux  
-     source venv/bin/activate  
-     # Windows  
-     venv\Scripts\activate  
-     ```
+Create a new folder for your project and navigate into it:
+```bash
+mkdir gamms
+cd gamms
+```
 
-2. **Install Gamms**  
-   Navigate to the cloned `gamms` folder and install:  
+Create and activate a virtual environment:
 
-   ```bash  
-   pip install .  # Installs Gamms and dependencies into the venv  
-   ```
+##### Mac/Linux:
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
-3. **Verify Installation**  
-   ```bash  
-   python -c "import gamms; print('Success! Version:', gamms.__version__)"  
-   ```
+##### Windows:
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
 
-   ⚠️ For more **detail** or **troubleshooting**, visit the `gamms` library's office documentation here: [Visit the Quick Start Guide](https://gammsim.github.io/gamms/start/).
+#### 2. Install GAMMS
 
-4. **Configure and Run**  
+Install GAMMS directly into the virtual environment:
+```bash
+python -m pip install git+https://github.com/GAMMSim/gamms.git
+```
 
-   - Navigate to `League/games`.
-   - Open an example folder, or create your own example folder. The structure of the files can be found in [File Structure](#-file-structure).
+#### 3. Verify Installation
 
-   - Follow the instructions in [How to Use](#-how-to-use).
+Test the installation:
+```python
+import gamms
+print("Gamms version:", gamms.__version__)
+```
+
+> ⚠️ **Important**
+>
+> For **troubleshooting** about the `gamms` library, checkout the office documentation here [GAMMS Library](https://gammsim.github.io/gamms/).
+
+#### 4. Install the League Repository
+
+Clone the `League` repository for game examples:
+```bash
+git clone https://github.com/GAMMSim/League.git
+```
+
+If you do not have `osmnx` installed, please run: 
+
+```bash
+pip install osmnx
+```
+
+#### 5. Run the Game
+
+- Navigate to `League/games`.
+- Open an example folder, or create your own example folder. The structure of the files can be found in [File Structure](#-file-structure).
+- Follow the instructions in [How to Use](#-how-to-use).
+
+> ⚠️ **Important**
+>
+> For **troubleshooting** about the `League` library, submit an **issue** in github.
+
+For advanced usage about the `League`, see [Advanced Usage](#-advanced-usage).
 
 ## 📁 File Structure
 
@@ -129,10 +142,10 @@
 └── utilities.py
 ```
 
-📝 **Notes**:
-
-- ✅ Keep `utilities.py` in the root of `games` folder
-- ⚠️ Root directory must be `.../games` to avoid errors
+> ⚠️ **Important**:
+>
+> - Keep `utilities.py` in the root of `games` folder.
+> - Root directory must be `.../games` to avoid errors.
 
 ## 🎯 How to Use
 
@@ -192,7 +205,9 @@ VISUALIZATION_ENGINE = gamms.visual.Engine.PYGAME
 - `WINDOW_SIZE (tuple)`: Game window dimensions in pixels
 - `GAME_SPEED (float)`: Simulation speed control (higher = slower)
 - `DRAW_NODE_ID (bool)`: Toggle node ID display
-  > ⚠️ **Warning**: Enabling node IDs significantly reduces rendering performance
+  > ⚠️ **Warning**
+  >
+  > Enabling node IDs significantly reduces rendering performance
 - `VISUALIZATION_ENGINE`: Choose visualization engine type. Use `visual.Engine.NO_VIS` for a dry run without rendering
 
 ### 🗺️ Graph Parameters
@@ -203,7 +218,9 @@ RESOLUTION = 200.0
 ```
 
 - `GRAPH_PATH (str)`: Path to the graph file (must be `.pkl` file)
-  > **Note**: If the file doesn't exist, the program generates it using:
+  > 💡 **Note**
+  >
+  > If the file doesn't exist, the program generates it using:
   - `LOCATION (str)`: Real-world location to base the graph on
   - `RESOLUTION (float)`: Graph resolution; higher values mean lower node density
 
