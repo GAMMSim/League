@@ -1,25 +1,22 @@
 # README
 
 ## 📑 Table of Contents
-  - [🚀 Quick Start Guide](#-quick-start-guide)
-    - [⚙️ Requirements](#️-requirements)
-    - [📥 Installation](#-installation)
-  - [📁 File Structure](#-file-structure)
-  - [🎯 How to Use](#-how-to-use)
-    - [Step 1: Create Config File](#step-1-create-config-file)
-    - [Step 2: Define Strategies](#step-2-define-strategies)
-    - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
-    - [Step 4: Game Loop \& Termination](#step-4-game-loop--termination)
-    - [Step 5: Run the Game](#step-5-run-the-game)
-  - [🔧 Advanced Usage](#-advanced-usage)
+- [🚀 Quick Start Guide](#-quick-start-guide)
+  - [⚙️ Requirements](#️-requirements)
+  - [📥 Installation](#-installation)
+- [📁 File Structure](#-file-structure)
+- [🎯 How to Use](#-how-to-use)
+  - [Step 1: Create Config File](#step-1-create-config-file)
+  - [Step 2: Define Strategies](#step-2-define-strategies)
+  - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
+  - [Step 4: Game Loop \& Termination](#step-4-game-loop--termination)
+  - [Step 5: Run the Game](#step-5-run-the-game)
+- [🔧 Advanced Usage](#-advanced-usage)
   - [⚙️ Config.py](#️-configpy)
     - [🎨 Color Parameters](#-color-parameters)
     - [🖥️ Simulation Interface Parameters](#️-simulation-interface-parameters)
     - [🗺️ Graph Parameters](#️-graph-parameters)
     - [🎮 Game Parameters](#-game-parameters)
-      - [Sensors](#sensors)
-      - [Flags](#flags)
-      - [Interaction Model](#interaction-model)
     - [🕹️ Agent Parameters](#️-agent-parameters)
   - [🎲 Game.py](#-gamepy)
     - [📁 Structure Overview](#-structure-overview)
@@ -38,7 +35,7 @@
     - [🔄 Common Operations](#-common-operations)
       - [🗑️ Removing Agents](#️-removing-agents)
       - [🔄 Respawning Agents](#-respawning-agents)
-  - [🔗 Additional Resources](#-additional-resources)
+- [🔗 Additional Resources](#-additional-resources)
 
 ## 🚀 Quick Start Guide
 
@@ -291,7 +288,7 @@ Individual settings override global parameters for the specified agent. Defender
 
 The `game.py` file is the main script that runs the game simulation. It orchestrates all game components and manages the game loop.
 
-#### 📁 Structure Overview
+### 📁 Structure Overview
 
 1. **Environment Setup**
 ```python
@@ -352,9 +349,9 @@ initialize_flags(ctx, FLAG_POSITIONS, FLAG_SIZE, FLAG_COLOR)
 - Places flags in game environment
 - Uses parameters from `config.py`
 
-#### 🎮 Main Game Loop
+### 🎮 Main Game Loop
 
-##### Game Loop Example
+#### Game Loop Example
 ```python
 while not ctx.is_terminated():
     # 1. Process each agent's turn
@@ -388,7 +385,7 @@ while not ctx.is_terminated():
     interaction_model.check_agent_interaction(ctx, G, agent_params_map, INTERACTION_MODEL)
 ```
 
-##### State Management
+#### State Management
 Add any variables your strategy needs to the state dictionary:
 ```python
 # Example: Adding custom data to state
@@ -399,7 +396,7 @@ state.update({
 })
 ```
 
-##### Termination Examples
+#### Termination Examples
 ```python
 # Victory condition: All attackers captured
 if not any(agent.team == "attacker" for agent in ctx.agent.create_iter()):
@@ -562,7 +559,7 @@ defender.current_node_id = defender.start_node_id
 
 ---
 
-### 🔗 Additional Resources
+## 🔗 Additional Resources
 [Documentation and examples continue to be updated] 
 
 This document is a work in progress. If you find missing information or areas for improvement, please submit an issue!
