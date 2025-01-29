@@ -6,11 +6,6 @@
   - [📥 Installation](#-installation)
 - [📁 File Structure](#-file-structure)
 - [🎯 How to Use](#-how-to-use)
-  - [Step 1: Create Config File](#step-1-create-config-file)
-  - [Step 2: Define Strategies](#step-2-define-strategies)
-  - [Step 3: Setup Agent Interactions](#step-3-setup-agent-interactions)
-  - [Step 4: Game Loop \& Termination](#step-4-game-loop--termination)
-  - [Step 5: Run the Game](#step-5-run-the-game)
 - [🔧 Advanced Usage](#-advanced-usage)
   - [⚙️ Config.py](#️-configpy)
     - [🎨 Color Parameters](#-color-parameters)
@@ -89,7 +84,7 @@ print("Gamms version:", gamms.__version__)
 
 > ⚠️ **Important**
 >
-> For **troubleshooting** about the `gamms` library, checkout the official documentation here [GAMMS Library](https://gammsim.github.io/gamms/).
+> For **troubleshooting** about the `gamms` library, checkout the office documentation here [GAMMS Library](https://gammsim.github.io/gamms/).
 
 #### 4. Install the League Repository
 
@@ -112,7 +107,7 @@ pip install osmnx
 
 > ⚠️ **Important**
 >
-> For **troubleshooting** about the `League` repository, submit an **issue** in github.
+> For **troubleshooting** about the `League` library, submit an **issue** in github.
 
 For advanced usage about the `League`, see [Advanced Usage](#-advanced-usage).
 
@@ -142,34 +137,84 @@ For advanced usage about the `League`, see [Advanced Usage](#-advanced-usage).
 > - Keep `utilities.py` in the root of `games` folder.
 > - Root directory must be `.../games` to avoid errors.
 
-## 🎯 How to Use
+## **🏆 The League**
 
-### Step 1: Create Config File
-Set up your game parameters in `config.py`:
-- Window size and game speed
-- Map settings
-- Agent properties
-- Flag positions
+### **📋 Game Rules**
 
-### Step 2: Define Strategies
+The game rules are specified in the `# Game Rules` section in `config.py`. All participants must follow these rules without modification.
+
+### **🧠 Strategies**
+
+As a **League** player, your focus should be on strategy submission through `attacker_strategy.py` and `defender_strategy.py`.
+
+The `strategy` function must accept the agent's `state` as input and specify the next position using:
+
+```python
+state['action'] = node_id
+```
+
+For comprehensive strategy implementation guidelines, see the [Strategy](#-strategy) section in [Advanced Usage](-#advanced-usage)
+
+### **⚠️ Modification Guidelines**
+
+For League participation, you may modify the following parameters:
+
+* **🗺️ Graph Settings**
+   * **✅ Allowed:** Node color, node size, edge color
+   * **✅ Allowed:** Window size, game speed
+   * **✅ Allowed:** Visualization method
+   * **✅ Allowed:** Graph location, graph resolution
+   * **❌ Restricted:** Edge weight, node weight
+
+* **🤖 Agent Settings**
+   * **✅ Allowed:** Agent positions
+   * **✅ Allowed:** Agent colors, agent size
+   * **❌ Restricted:** Agent sensors
+   * **❌ Restricted:** Agent capture radius
+   * **❌ Restricted:** Agent speed
+
+* **🏁 Flag Settings**
+   * **✅ Allowed:** Flag colors, flag size
+   * **✅ Allowed:** Flag positions, flag weight
+
+* **🎮 Game Mechanics**
+   * **❌ Restricted:** Interaction model
+   * **❌ Restricted:** Termination conditions & payoff structure
+
+For advanced features or rule modifications, proceed to the [Advanced Usage](-#advanced-usage) section. For implementation guidance, refer to the [🎯 How to Use](#-how-to-use) section below.
+
+## **🎯 How to Use**
+
+**⚠️ Warning:**
+Options marked with ⚠️ may affect **League** rules. Review the [Modification Guidelines](-modification-guidelines) thoroughly before making changes.
+
+**Step 1: Customize Config File**
+Configure your game parameters in `config.py`:
+
+* Window size and game speed
+* ⚠️ Map settings
+* ⚠️ Agent properties
+* ⚠️ Flag positions
+
+**Step 2: Define Strategies**
 Create two strategy files:
-- `attacker_strategy.py`: Define how attackers behave
-- `defender_strategy.py`: Define how defenders behave
+* `attacker_strategy.py` - Defines attacker behavior
+* `defender_strategy.py` - Defines defender behavior
 
-### Step 3: Setup Agent Interactions
-Choose or create an interaction model in `interaction_model.py`
-- Kill on capture
-- Respawn system
-- Custom interaction rules
+**[⚠️ Optional] Step 3: Setup Agent Interactions**
+Choose or create an interaction model in `interaction_model.py`:
+* Kill on capture
+* Respawn system
+* Custom interaction rules
 
-### Step 4: Game Loop & Termination
+**[⚠️ Optional] Step 4: Game Loop & Termination**
 Define in `game.py`:
-- Victory conditions
-- Time limits
-- Score thresholds
+* Victory conditions
+* Time limits
+* Score thresholds
 
-### Step 5: Run the Game
-Execute from the correct directory:
+**Step 5: Run the Game**
+Execute from the project directory:
 ```bash
 python game.py
 ```
@@ -288,7 +333,7 @@ Individual settings override global parameters for the specified agent. Defender
 
 The `game.py` file is the main script that runs the game simulation. It orchestrates all game components and manages the game loop.
 
-### 📁 Structure Overview
+#### 📁 Structure Overview
 
 1. **Environment Setup**
 ```python
@@ -349,9 +394,9 @@ initialize_flags(ctx, FLAG_POSITIONS, FLAG_SIZE, FLAG_COLOR)
 - Places flags in game environment
 - Uses parameters from `config.py`
 
-### 🎮 Main Game Loop
+#### 🎮 Main Game Loop
 
-#### Game Loop Example
+##### Game Loop Example
 ```python
 while not ctx.is_terminated():
     # 1. Process each agent's turn
@@ -385,7 +430,7 @@ while not ctx.is_terminated():
     interaction_model.check_agent_interaction(ctx, G, agent_params_map, INTERACTION_MODEL)
 ```
 
-#### State Management
+##### State Management
 Add any variables your strategy needs to the state dictionary:
 ```python
 # Example: Adding custom data to state
@@ -396,7 +441,7 @@ state.update({
 })
 ```
 
-#### Termination Examples
+##### Termination Examples
 ```python
 # Victory condition: All attackers captured
 if not any(agent.team == "attacker" for agent in ctx.agent.create_iter()):
@@ -456,16 +501,22 @@ def strategy(state):
 
 #### 🔑 Key Concepts
 
-##### 1. State Dictionary Access
+##### 1. Parameters
+The `strategy` function takes a single parameter `state`, which contains the following information:
+
 ```python
 # Basic state information
-current_node = state['curr_pos']               # Current position
-flag_positions = state['flag_pos']             # Flag positions
-flag_weights = state['flag_weight']            # Flag values
-agent_params = state['agent_params']           # Agent parameters
+current_node = state['curr_pos']        # Current position
+flag_positions = state['flag_pos']      # Flag positions
+flag_weights = state['flag_weight']     # Flag values
+agent_params = state['agent_params']    # Agent parameters
 ```
 
+To access additional state data, you need to manually add data entries in the game loop. For details, refer to State Management.
+
 ##### 2. Sensor Data Usage
+To use the sensor data:
+
 ```python
 # Get agent positions
 attacker_positions, defender_positions = extract_sensor_data(
@@ -476,11 +527,23 @@ attacker_positions, defender_positions = extract_sensor_data(
 neighbor_data = extract_neighbor_sensor_data(state)
 ```
 
-##### 3. Map Navigation
-```python
-# Access map graph
-graph = agent_params.map.graph
+> 💡 **Note:**
+>
+> - The `extract_sensor_data` function contains code to construct the `agent.map`. This line of code is **necessary**.
+> - For a detailed breakdown of `extract_sensor_data` and `extract_neighbor_sensor_data` functions, check `utility.py`.
 
+##### 3. Map Navigation
+Agents don't have direct knowledge of the graph. Instead, they construct their own `map` based on collected sensor data. The `extract_sensor_data` automatically constructs and updates the agent's `map`.
+
+To access the agent's copy of the graph:
+
+```python
+graph = agent_params.map.graph
+```
+
+This returns a `networkx` graph that supports all standard `nx.graph` functions. For example:
+
+```python
 # Calculate shortest path
 dist = nx.shortest_path_length(
     graph, source=current_node, target=flag
@@ -490,8 +553,19 @@ dist = nx.shortest_path_length(
 next_node = agent_params.map.shortest_path_to(
     current_node, closest_flag, agent_params.speed
 )
+```
+
+To build your graph differently or define your strategy based on raw dictionary data from the sensor, check the `map` class implementation in `utility.py`.
+
+##### 4. Set Next Position
+After determining the agent's next move, set:
+
+```python
 state['action'] = next_node
 ```
+
+> 💡 **Note:**
+> The current `gamms` library maintains independent `state` and `strategy` for each agent. You can only set your own position in your strategy. For centralization, please refer to `League/games/group_action` (‼️ NOT YET IMPLEMENTED)
 
 ### 🤝 Agent Interaction
 
