@@ -89,7 +89,7 @@ print("Gamms version:", gamms.__version__)
 
 > ⚠️ **Important**
 >
-> For **troubleshooting** about the `gamms` library, checkout the office documentation here [GAMMS Library](https://gammsim.github.io/gamms/).
+> For **troubleshooting** about the `gamms` library, checkout the official documentation here [GAMMS Library](https://gammsim.github.io/gamms/).
 
 #### 4. Install the League Repository
 
@@ -112,7 +112,7 @@ pip install osmnx
 
 > ⚠️ **Important**
 >
-> For **troubleshooting** about the `League` library, submit an **issue** in github.
+> For **troubleshooting** about the `League` repository, submit an **issue** in github.
 
 For advanced usage about the `League`, see [Advanced Usage](#-advanced-usage).
 
