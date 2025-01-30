@@ -1,5 +1,5 @@
 import random
-from utilities import *
+from lib.utilities import *
 
 def strategy(state):
     current_node = state['curr_pos']
