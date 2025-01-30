@@ -6,7 +6,7 @@ The [**Multiagent Games League (MGL)**](mdgleague.notion.site) is a simulation-b
 
 For comprehensive documentation including installation guides, game rules, strategy development, and examples:
 
-> **➡️ Visit our [Notion Documentation](mdgleague.notion.site)**
+> **➡️ Visit our [Notion Documentation](https://mdgleague.notion.site/Multiagent-Games-League-18b0355f26b98078a9ebf56dfccc07c7)**
 
 ## 🔗 Links
 - [GAMMS Github](https://github.com/GAMMSim/gamms)
