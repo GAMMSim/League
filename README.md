@@ -1,6 +1,6 @@
 # **Multiagent Games League (MGL)**
 
-The [**Multiagent Games League (MGL)**](mdgleague.notion.site) is a simulation-based research initiative that fosters collaboration between machine learning (ML) and game theory (GT) researchers. Utilizing the [**Graph-based Adversarial Multiagent Modeling Simulator (GAMMS)**](https://github.com/GAMMSim/gamms), **MGL** provides a scalable testbed for studying multi-agent decision-making in adversarial environments. It enables benchmarking, cross-task collaboration, and exploration of complex strategies, contributing to real-world experimentation and advancing multi-agent research.
+The [**Multiagent Games League (MGL)**](https://mdgleague.notion.site/Multiagent-Games-League-18b0355f26b98078a9ebf56dfccc07c7) is a simulation-based research initiative that fosters collaboration between machine learning (ML) and game theory (GT) researchers. Utilizing the [**Graph-based Adversarial Multiagent Modeling Simulator (GAMMS)**](https://github.com/GAMMSim/gamms), **MGL** provides a scalable testbed for studying multi-agent decision-making in adversarial environments. It enables benchmarking, cross-task collaboration, and exploration of complex strategies, contributing to real-world experimentation and advancing multi-agent research.
 
 ## 📚 Documentation
 
