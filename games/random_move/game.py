@@ -20,9 +20,10 @@ if not root_dir.endswith("games"):
     root_dir = parent_dir
     sys.path.append(root_dir)
 
+from lib.core import *
+check_and_install_dependencies()
 from lib.interface import *
 from lib.utilities import *
-from lib.core import *
 import config as cfg
 import attacker_strategy
 import defender_strategy
@@ -30,7 +31,6 @@ from gamms.VisualizationEngine import Color
 
 print(colored("Imported libraries successfully", "green"))
 print("Root Directory: ", root_dir)
-check_and_install_dependencies()
 
 
 # ------------------------------------------------------------------------------
