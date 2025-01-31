@@ -12,7 +12,7 @@ gamerule:
       capture_radius: 1        
       sensors: ["map", "agent", "neighbor"]
   interaction:
-    tagging: both_respawn
+    tagging: kill
     capture: kill     
     prioritize: capture
   payoff:

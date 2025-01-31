@@ -181,6 +181,7 @@ def finalize_logger(log_file):
         return
         
     try:
+        log_file.seek(log_file.tell() - 2)
         log_file.write("\n]\n")  # End of JSON array
         log_file.close()
     except IOError as e:
@@ -224,7 +225,8 @@ def check_and_install_dependencies():
     # Required packages
     required_packages = {
         'yaml': 'pyyaml',
-        'osmnx': 'osmnx'
+        'osmnx': 'osmnx',
+        'networkx': 'networkx',
     }
 
     missing_packages = []

@@ -16,6 +16,10 @@ mkdocs.yml
 docs/
 *.json
 
+# Bebug files
+debug/
+debug.yaml
+
 # C extensions
 *.so
 
