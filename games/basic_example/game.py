@@ -96,23 +96,18 @@ def main():
             for agent in ctx.agent.create_iter():
                 # Get current state and update with flag information
                 state = agent.get_state()
-                state.update({"flag_pos": cfg.FLAG_POSITIONS, "flag_weight": cfg.FLAG_WEIGHTS, "agent_params": agent_params_map.get(agent.name, {}), "time": time, "payoff": payoff})
+                state.update({"flag_pos": cfg.FLAG_POSITIONS, "flag_weight": cfg.FLAG_WEIGHTS, "agent_params": agent_params_map.get(agent.name, {}), "time": time, "payoff": payoff, "name": agent.name})
 
                 # Execute agent strategy or handle human input
                 if hasattr(agent, "strategy") and agent.strategy is not None:
                     agent.strategy(state)
+                    check_agent_dynamics(state, agent_params_map.get(agent.name, {}), G)
                 else:
                     # Handle human-controlled agents
                     node = ctx.visual.human_input(agent.name, state)
                     state["action"] = node
 
                 agent.set_state()
-
-            # Check victory condition: all attackers captured
-            still_has_attackers = any(agent.team == "attacker" for agent in ctx.agent.create_iter())
-            if not still_has_attackers:
-                print("All attackers have been captured")
-                break
 
             # Update visualization and check agent interactions
             ctx.visual.simulate()

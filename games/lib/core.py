@@ -264,3 +264,21 @@ def check_and_install_dependencies():
 
     print(colored("All required dependencies are satisfied!", "green"))
     return True
+
+
+def check_agent_dynamics(state, agent_params, G):
+    agent_next_node = state['action']
+    agent_speed = agent_params.speed
+    agent_prev_node = state['curr_pos']
+    if agent_next_node is None:
+        agent_next_node = agent_prev_node
+        print(colored(f"Agent {state['name']} has no next node, staying at {agent_prev_node}", "yellow"))
+    try:
+        # Check if the agent can reach the next node within its speed limit
+        shortest_path_length = nx.shortest_path_length(G, source=agent_prev_node, target=agent_next_node)
+        if shortest_path_length > agent_speed:
+            print(colored(f"Agent {state['name']} cannot reach {agent_next_node} from {agent_prev_node} within speed limit of {agent_speed}. Staying at {agent_prev_node}", "yellow"))
+            state['action'] = agent_prev_node
+    except nx.NetworkXNoPath:
+        print(colored(f"No path from {agent_prev_node} to {agent_next_node}. Staying at {agent_prev_node}", "yellow"))
+        state['action'] = agent_prev_node

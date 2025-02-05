@@ -39,7 +39,6 @@ venv\Scripts\activate
 2. #### **Install GAMMS and Dependencies**
 ```bash
 python -m pip install git+https://github.com/GAMMSim/gamms.git
-pip install osmnx
 ```
 
 3. #### **Get League Examples**
