@@ -1,31 +1,49 @@
 # This is the file that contains functions used to configure the League interface
 
+import platform
+import os
 
-# Colored output text
+def init_colors():
+    """Initialize color support for Windows PowerShell"""
+    if platform.system() == 'Windows':
+        # Enable ANSI colors in Windows PowerShell
+        os.system('') # This triggers VT100 mode
+
 def colored(text: str, color: str) -> str:
+    # Initialize color support
+    init_colors()
+    
     prefixes = {
         'red': 'Error: ',
         'yellow': 'Warning: ',
         'blue': 'Debug: ',
-        'green': 'Success: ',  # Common for success/completion messages
-        'orange': 'Scored: '  # Good for notable but not warning messages
+        'green': 'Success: ',
+        'orange': 'Scored: '
     }
-    # Define color codes separately
+    
+    # Using standard ANSI codes that work in both environments
     color_codes = {
-        'red': '\033[91m',
-        'orange': '\033[38;5;208m',
-        'yellow': '\033[93m',
-        'green': '\033[92m',
-        'blue': '\033[94m'
+        'red': '\033[31m',      # Using standard red instead of bright red
+        'orange': '\033[33m',   # Using yellow as fallback for orange
+        'yellow': '\033[33m',
+        'green': '\033[32m',
+        'blue': '\033[34m'
     }
+    
     prefix = prefixes.get(color.lower(), '')
     color_code = color_codes.get(color.lower(), '')
     return f"{color_code}{prefix}{text}\033[0m"
 
 if __name__ == "__main__":
-    print(colored("This is a test message", "green"))
-    print(colored("This is a test message", "red"))
-    print(colored("This is a test message", "yellow"))
-    print(colored("This is a test message", "blue"))
-    print(colored("This is a test message", "orange"))
-    print(colored("This is a test message", "purple"))
+    # Test the colors
+    test_messages = [
+        ("This is a test message", "green"),
+        ("This is a test message", "red"),
+        ("This is a test message", "yellow"),
+        ("This is a test message", "blue"),
+        ("This is a test message", "orange"),
+        ("This is a test message", "purple")
+    ]
+    
+    for message, color in test_messages:
+        print(colored(message, color))

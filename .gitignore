@@ -15,6 +15,11 @@ setup.py
 mkdocs.yml
 docs/
 *.json
+*.txt
+
+# Bebug files
+debug/
+debug.yaml
 
 # C extensions
 *.so

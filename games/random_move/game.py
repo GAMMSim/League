@@ -86,7 +86,8 @@ def main():
         initialize_flags(ctx, cfg.FLAG_POSITIONS, cfg.FLAG_SIZE, cfg.FLAG_COLOR)
 
         # Initialize the logger
-        log_file = initialize_logger(current_dir)  # Ensure LOG_SAVE_PATH is defined in config
+        if cfg.SAVE_LOG:
+            log_file = initialize_logger(current_dir)  # Ensure LOG_SAVE_PATH is defined in config
 
         # Main game loop
         while not ctx.is_terminated():
@@ -95,23 +96,18 @@ def main():
             for agent in ctx.agent.create_iter():
                 # Get current state and update with flag information
                 state = agent.get_state()
-                state.update({"flag_pos": cfg.FLAG_POSITIONS, "flag_weight": cfg.FLAG_WEIGHTS, "agent_params": agent_params_map.get(agent.name, {}), "time": time, "payoff": payoff})
+                state.update({"flag_pos": cfg.FLAG_POSITIONS, "flag_weight": cfg.FLAG_WEIGHTS, "agent_params": agent_params_map.get(agent.name, {}), "time": time, "payoff": payoff, "name": agent.name})
 
                 # Execute agent strategy or handle human input
                 if hasattr(agent, "strategy") and agent.strategy is not None:
                     agent.strategy(state)
+                    check_agent_dynamics(state, agent_params_map.get(agent.name, {}), G)
                 else:
                     # Handle human-controlled agents
                     node = ctx.visual.human_input(agent.name, state)
                     state["action"] = node
 
                 agent.set_state()
-
-            # Check victory condition: all attackers captured
-            still_has_attackers = any(agent.team == "attacker" for agent in ctx.agent.create_iter())
-            if not still_has_attackers:
-                print("All attackers have been captured")
-                break
 
             # Update visualization and check agent interactions
             ctx.visual.simulate()
@@ -120,20 +116,23 @@ def main():
                 break
             payoff = compute_payoff(cfg.PAYOFF, captures, tags)
 
-            # Prepare agent positions for logging
-            active_agents = list(ctx.agent.create_iter())  # Convert iterator to list for multiple passes
-            agent_positions = create_game_log_entry(agent_params_map, active_agents)
+            if cfg.SAVE_LOG:
+                # Prepare agent positions for logging
+                active_agents = list(ctx.agent.create_iter())  # Convert iterator to list for multiple passes
+                agent_positions = create_game_log_entry(agent_params_map, active_agents)
 
-            # Log the current game step
-            log_game_step(log_file, time, payoff, agent_positions)
+                # Log the current game step
+                log_game_step(log_file, time, payoff, agent_positions)
 
         # After the loop ends, finalize the log
-        finalize_logger(log_file)
+        if cfg.SAVE_LOG:
+            finalize_logger(log_file)
+            cfg.SAVE_LOG = False  # Prevent finalization from being called again
     except KeyboardInterrupt:
         print(colored("Game interrupted by user. Cleaning up...", "yellow"))
         # Handle clean exit when Ctrl+C is pressed
         try:
-            if log_file:
+            if cfg.SAVE_LOG:
                 # Log final state before exit
                 active_agents = list(ctx.agent.create_iter())
                 agent_positions = create_game_log_entry(agent_params_map, active_agents)
@@ -146,7 +145,7 @@ def main():
         print(colored(f"An error occurred: {e}", "red"))
         # Handle other exceptions as before
         try:
-            if log_file:
+            if cfg.SAVE_LOG:
                 active_agents = list(ctx.agent.create_iter())
                 agent_positions = create_game_log_entry(agent_params_map, active_agents)
                 log_game_step(log_file, time, payoff, agent_positions, is_last=True)
@@ -156,8 +155,9 @@ def main():
     finally:
         print(colored("Game completed successfully", "green"))
         # Ensure logger is always finalized
-        if log_file:
+        if cfg.SAVE_LOG:
             finalize_logger(log_file)
+            cfg.SAVE_LOG = False
 
 
 if __name__ == "__main__":

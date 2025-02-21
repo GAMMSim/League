@@ -19,6 +19,8 @@ GAME_RULE = "V1"
 
 MAX_TIME = 100
 
+SAVE_LOG = False
+
 # Interaction Model
 INTERACTION = {
     "tagging": "both_kill",
