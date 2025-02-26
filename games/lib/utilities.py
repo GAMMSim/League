@@ -305,7 +305,7 @@ def load_game_rule(config, game_rule: str) -> None:
         raise
 
 
-def initialize_game_context(vis_engine, graph_path, location, resolution):
+def initialize_game_context(vis_engine, graph_path, location, resolution, node_limit=None):
     """
     Initialize the game context and load or create the graph used in the simulation.
 
@@ -314,6 +314,7 @@ def initialize_game_context(vis_engine, graph_path, location, resolution):
         graph_path (str): Path to the graph file.
         location (str): Location to generate a new graph if the file does not exist.
         resolution (float): Resolution for generating a new graph.
+        node_limit (int): Limit the number of nodes in the graph.
 
     Returns:
         ctx: The initialized game context.
@@ -327,6 +328,18 @@ def initialize_game_context(vis_engine, graph_path, location, resolution):
         print(colored("Graph loaded from file.", "green"))
     else:
         G = gamms.osm.create_osm_graph(location, resolution=resolution)
+        
+        if node_limit is not None and len(G.nodes) > node_limit:
+            # Check if node limit is integer
+            if isinstance(node_limit, int):
+                largest_cc = max(nx.weakly_connected_components(G), key=len)
+                if len(largest_cc) > node_limit:
+                    # Sample node_limit nodes from largest component
+                    sampled_nodes = list(largest_cc)[:node_limit]
+                    G = G.subgraph(sampled_nodes).copy()
+            else:
+                print(colored("Node limit must be an integer.", "red"))
+        
         with open(graph_path, "wb") as f:
             pickle.dump(G, f)
         print(colored("New graph generated and saved to file.", "green"))
