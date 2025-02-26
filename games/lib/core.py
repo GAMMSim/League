@@ -44,6 +44,7 @@ def check_agent_interaction(ctx, G, agent_params, flag_positions, interaction_co
                     print(colored(f"Attacker {attacker.name} captured flag at {flag}", "orange"))
                     if handle_interaction(ctx, attacker, interaction_config["capture"], processed, agent_params):
                         captures += 1
+                        break
     # Check combat interactions
     for defender in defenders[:]:
         if defender.name in processed:

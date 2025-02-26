@@ -133,14 +133,16 @@ class AgentParams:
         self.capture_radius = capture_radius
         self.map = map
         self.start_node_id = start_node_id
-                
+
         # Handle any additional custom kwargs
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+
 # ------------------------------------------------------------------------------
 # RAW HELPER FUNCTIONS
 # ------------------------------------------------------------------------------
+
 
 def extract_map_sensor_data(state):
     sensor_data = state.get("sensor", {})
@@ -188,6 +190,7 @@ def extract_sensor_data(state, flag_pos, flag_weight, agent_params):
     attacker_positions = agent_params.map.get_team_positions("attacker")
     defender_positions = agent_params.map.get_team_positions("defender")
     return attacker_positions, defender_positions
+
 
 # ------------------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -358,23 +361,12 @@ def initialize_agents(ctx, attacker_config, defender_config, global_params):
 
         for name, config in configs.items():
             start_node_id = config.get("start_node_id")
-            
+
             # Create agent entry
-            entries[name] = {
-                "team": team,
-                "sensors": get_agent_param(config, "sensors", team),
-                "color": get_agent_param(config, "color", team),
-                "current_node_id": start_node_id,  # Set initial position
-                "start_node_id": start_node_id
-            }
+            entries[name] = {"team": team, "sensors": get_agent_param(config, "sensors", team), "color": get_agent_param(config, "color", team), "current_node_id": start_node_id, "start_node_id": start_node_id}  # Set initial position
 
             # Create parameter object
-            params[name] = AgentParams(
-                speed=get_agent_param(config, "speed", team),
-                capture_radius=get_agent_param(config, "capture_radius", team),
-                map=Graph(),
-                start_node_id=start_node_id
-            )
+            params[name] = AgentParams(speed=get_agent_param(config, "speed", team), capture_radius=get_agent_param(config, "capture_radius", team), map=Graph(), start_node_id=start_node_id)
 
         return entries, params
 
