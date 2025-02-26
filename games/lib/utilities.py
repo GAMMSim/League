@@ -305,6 +305,92 @@ def load_game_rule(config, game_rule: str) -> None:
         raise
 
 
+def reduce_graph_to_size(G, node_limit):
+    """
+    Reduces a graph to have at most node_limit nodes while maintaining connectivity.
+
+    Args:
+        G (nx.MultiDiGraph): The input graph to reduce
+        node_limit (int): Maximum number of nodes in the output graph
+
+    Returns:
+        nx.MultiDiGraph: A reduced graph with consecutive node IDs from 0 to n-1
+    """
+    if not isinstance(node_limit, int):
+        print(colored("Node limit must be an integer.", "red"))
+        return G
+
+    # If graph is already small enough, just renumber and return
+    if len(G.nodes) <= node_limit:
+        return renumber_graph(G)
+
+    # Find the largest weakly connected component
+    largest_cc = max(nx.weakly_connected_components(G), key=len)
+
+    # If largest component is already small enough, use it
+    if len(largest_cc) <= node_limit:
+        sub_G = G.subgraph(largest_cc).copy()
+        return renumber_graph(sub_G)
+
+    # Otherwise, extract a connected subgraph using BFS
+    import random
+
+    start_node = random.choice(list(largest_cc))
+
+    subgraph_nodes = set([start_node])
+    frontier = [start_node]
+
+    while len(subgraph_nodes) < node_limit and frontier:
+        current = frontier.pop(0)
+        neighbors = list(G.successors(current)) + list(G.predecessors(current))
+        for neighbor in neighbors:
+            if neighbor not in subgraph_nodes:
+                subgraph_nodes.add(neighbor)
+                frontier.append(neighbor)
+                if len(subgraph_nodes) >= node_limit:
+                    break
+
+    # Extract the subgraph
+    sub_G = G.subgraph(subgraph_nodes).copy()
+    return renumber_graph(sub_G)
+
+
+def renumber_graph(G):
+    """
+    Creates a new graph with node IDs renumbered from 0 to n-1.
+
+    Args:
+        G (nx.MultiDiGraph): Input graph
+
+    Returns:
+        nx.MultiDiGraph: Graph with renumbered nodes
+    """
+    H = nx.MultiDiGraph()
+
+    # Create mapping from old node IDs to new node IDs (0 to n)
+    mapping = {old_id: new_id for new_id, old_id in enumerate(G.nodes())}
+
+    # Add nodes with renumbered IDs
+    for old_id in G.nodes():
+        new_id = mapping[old_id]
+        # Copy all node attributes
+        H.add_node(new_id, **G.nodes[old_id])
+
+    # Add edges with renumbered IDs
+    edge_id = 0
+    for u, v, key, data in G.edges(data=True, keys=True):
+        new_u = mapping[u]
+        new_v = mapping[v]
+        # Update edge ID if it exists
+        edge_data = data.copy()
+        if "id" in edge_data:
+            edge_data["id"] = edge_id
+            edge_id += 1
+        H.add_edge(new_u, new_v, **edge_data)
+    print(colored(f"Graph renumbered with {len(H.nodes)} nodes.", "green"))
+    return H
+
+
 def initialize_game_context(vis_engine, graph_path, location, resolution, node_limit=None):
     """
     Initialize the game context and load or create the graph used in the simulation.
@@ -328,21 +414,18 @@ def initialize_game_context(vis_engine, graph_path, location, resolution, node_l
         print(colored("Graph loaded from file.", "green"))
     else:
         G = gamms.osm.create_osm_graph(location, resolution=resolution)
-        
+
         if node_limit is not None and len(G.nodes) > node_limit:
-            # Check if node limit is integer
-            if isinstance(node_limit, int):
-                largest_cc = max(nx.weakly_connected_components(G), key=len)
-                if len(largest_cc) > node_limit:
-                    # Sample node_limit nodes from largest component
-                    sampled_nodes = list(largest_cc)[:node_limit]
-                    G = G.subgraph(sampled_nodes).copy()
-            else:
-                print(colored("Node limit must be an integer.", "red"))
-        
+            try:
+                original_node_count = len(G.nodes)
+                G = reduce_graph_to_size(G, node_limit)
+                print(colored(f"Graph reduced from {original_node_count} to {len(G.nodes)} nodes.", "yellow"))
+            except Exception as e:
+                print(colored(f"Error reducing graph: {e}", "red"))
+
         with open(graph_path, "wb") as f:
             pickle.dump(G, f)
-        print(colored("New graph generated and saved to file.", "green"))
+        print(colored(f"New graph generated with {len(G.nodes)} nodes and saved to file.", "green"))
 
     ctx.graph.attach_networkx_graph(G)
     return ctx, G
