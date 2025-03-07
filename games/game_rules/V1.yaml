@@ -14,7 +14,7 @@ gamerule:
   interaction:
     tagging: both_kill
     capture: kill     
-    prioritize: capture
+    prioritize: tagging
   payoff:
     model: v1
     constants:
