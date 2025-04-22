@@ -37,10 +37,12 @@ print("Root Directory: ", root_dir)
 # Main Game Script
 # ------------------------------------------------------------------------------
 def main():
-    # Record the time
+    # Record the time and payoff
     time = 0
-    # Record the payoff
     payoff = 0
+
+    # Track final counts for end‑of‑game summary
+    total_captures = total_tags = total_attacker_count = total_defender_count = total_payoff = 0
 
     try:
 
@@ -93,28 +95,45 @@ def main():
         while not ctx.is_terminated():
             time += 1
             # Process each agent's turn
+            actions = {}
+            states  = {}
+            
             for agent in ctx.agent.create_iter():
                 # Get current state and update with flag information
                 state = agent.get_state()
                 state.update({"flag_pos": cfg.FLAG_POSITIONS, "flag_weight": cfg.FLAG_WEIGHTS, "agent_params": agent_params_map.get(agent.name, {}), "time": time, "payoff": payoff, "name": agent.name})
+                states[agent.name] = state
 
                 # Execute agent strategy or handle human input
                 if hasattr(agent, "strategy") and agent.strategy is not None:
                     agent.strategy(state)
-                    check_agent_dynamics(state, agent_params_map.get(agent.name, {}), G)
+                    actions[agent.name] = state["action"]
                 else:
                     # Handle human-controlled agents
                     node = ctx.visual.human_input(agent.name, state)
-                    state["action"] = node
+                    actions[agent.name] = node
 
+                    
+
+            for agent in ctx.agent.create_iter():
+                state = states[agent.name]
+                state["action"] = actions[agent.name]
+                check_agent_dynamics(state, agent_params_map.get(agent.name, {}), G)
                 agent.set_state()
 
             # Update visualization and check agent interactions
             ctx.visual.simulate()
             captures, tags, attacker_count, defender_count = check_agent_interaction(ctx, G, agent_params_map, cfg.FLAG_POSITIONS, cfg.INTERACTION)
+            
+            total_captures += captures
+            total_tags += tags
+            total_attacker_count = attacker_count
+            total_defender_count = defender_count
+            
             if check_termination(time, cfg.MAX_TIME, attacker_count, defender_count):
                 break
             payoff = compute_payoff(cfg.PAYOFF, captures, tags)
+            total_payoff += payoff
 
             if cfg.SAVE_LOG:
                 # Prepare agent positions for logging
@@ -154,6 +173,12 @@ def main():
 
     finally:
         print(colored("Game completed successfully", "green"))
+        print(f"→ Total time steps:   {time}")
+        print(f"→ Final payoff:       {payoff}")
+        print(f"→ Captures:           {total_captures}")
+        print(f"→ Tags:               {total_tags}")
+        print(f"→ Attackers alive:    {total_attacker_count}")
+        print(f"→ Defenders alive:    {total_defender_count}")
         # Ensure logger is always finalized
         if cfg.SAVE_LOG:
             finalize_logger(log_file)
