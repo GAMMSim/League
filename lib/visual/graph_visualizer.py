@@ -94,8 +94,12 @@ class GraphVisualizer:
                         # Load the graph from the specified path
                         with open(graph_file_path, "rb") as gf:
                             self.graph = pickle.load(gf)
-                    else:
+                    elif file_path.endswith(".pkl"):
                         self.graph = pickle.load(gf)
+                    elif file_path.endswith(".json"):
+                        G = self._export_places_graph_from_dsg(file_path)
+                    else:
+                        error("Unsupported file format. Only .pkl, .yml, and .json are supported.")
                 except Exception as e:
                     error(f"Error loading graph from file: {e}")
                     raise Exception(f"Error loading graph from file: {e}")
@@ -580,6 +584,40 @@ class GraphVisualizer:
 
         screen.blit(tooltip_surface, pos)
 
+    def _export_places_graph_from_dsg(filename: str, debug: bool = False) -> nx.MultiDiGraph:
+        from math import sqrt
+        import spark_dsg as dsg
+        # Check if the file name is a json file
+        if not filename.endswith(".json"):
+            error(f"Provided file is not a .json file: {filename}. Aborting process.")
+            return False
+        G = dsg.DynamicSceneGraph.load(str(filename))
+
+        # Get the places layer (usually layer 3)
+        places_layer = G.get_layer(dsg.DsgLayers.PLACES)
+
+        nx_places = nx.DiGraph()  # Use DiGraph
+
+        # Add nodes
+        for node in places_layer.nodes:
+            attrs = node.attributes
+            pos = attrs.position
+            nx_places.add_node(node.id.value, id=str(node.id), x=pos[0],y=pos[1],z=pos[2])
+
+        # Add edges
+        for edge in places_layer.edges:
+            ns = nx_places.nodes[edge.source]
+            nt = nx_places.nodes[edge.target]
+            dist = sqrt((ns.get('x') - nt.get('x'))**2 + (ns.get('y') - nt.get('y'))**2 + (ns.get('z') - nt.get('z'))**2)
+            nx_places.add_edge(edge.source, edge.target, id = (ns.get('id'),nt.get('id')), length = dist)
+
+        # if not isinstance(nx_places, nx.MultiDiGraph):
+        #     nx_places = cast_to_multidigraph(nx_places)
+        # Print basic info about the places graph
+        success(f"DSG Places subgraph has {nx_places.number_of_nodes()} nodes and {nx_places.number_of_edges()} edges", debug)
+
+        return nx_places
+    
     def visualize(self, save_path: Optional[str] = None, transparent_background: Optional[bool] = False) -> None:
         """
         Visualize the graph based on the mode.

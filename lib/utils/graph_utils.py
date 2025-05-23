@@ -42,7 +42,10 @@ def export_graph(filename: str, debug: bool = False) -> nx.MultiDiGraph:
         raise FileNotFoundError(f"Graph file does not exist at {filename}.")
     with open(filename, "rb") as f:
         try:
-            G = pickle.load(f)
+            if filename.endswith(".json"):
+                G = export_places_graph_from_dsg(filename, debug)
+            else:
+                G = pickle.load(f)
         except Exception as e:
             error(f"Error loading graph from {filename}: {e}")
             raise Exception(f"Error loading graph from {filename}: {e}")
@@ -56,6 +59,10 @@ def export_graph(filename: str, debug: bool = False) -> nx.MultiDiGraph:
 def export_places_graph_from_dsg(filename: str, debug: bool = False) -> nx.MultiDiGraph:
     from math import sqrt
     import spark_dsg as dsg
+    # Check if the file name is a json file
+    if not filename.endswith(".json"):
+        error(f"Provided file is not a .json file: {filename}. Aborting process.")
+        return False
     G = dsg.DynamicSceneGraph.load(str(filename))
 
     # Get the places layer (usually layer 3)
