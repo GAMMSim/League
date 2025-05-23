@@ -1,0 +1,61 @@
+# Default configuration file template
+
+# 1. GAME RULES AND MECHANICS
+game:
+  rule: null
+  max_time: "Error"
+  save_log: false
+  interaction: "Error"
+  payoff: "Error"
+  flag:
+    positions: 2
+    weights: null
+
+# 2. AGENT PARAMETERS
+
+# Define default globals for attackers and defenders
+defaults:
+  attacker_global: &default_attacker_global
+    speed: 1
+    capture_radius: 2
+    sensors: ["map", "agent", "neighbor"]
+  defender_global: &default_defender_global
+    speed: 1
+    capture_radius: 1
+    sensors: ["map", "agent", "neighbor"]
+
+agents:
+  attacker_global: *default_attacker_global
+  attacker_config:
+    # When creating new attacker configurations, if a parameter is not provided,
+    # you can merge the global default values.
+    attacker_0:
+      <<: *default_attacker_global
+      start_node_id: 0
+
+  defender_global: *default_defender_global
+  defender_config:
+    defender_0:
+      <<: *default_defender_global
+      start_node_id: 1
+
+# 3. ENVIRONMENT PARAMETERS
+environment:
+  graph_name: "Error"
+
+# 4. VISUALIZATION PARAMETERS
+visualization:
+  window_size: [1980, 1080]
+  game_speed: 2
+  draw_node_id: false
+  visualization_engine: "PYGAME"
+  colors:
+    attacker_global: "red"
+    defender_global: "blue"
+    flag: "green"
+  sizes:
+    flag_size: 10
+    global_agent_size: 10
+
+# 5. EXTRA PARAMETERS
+extra_prameters: null

@@ -1,10 +1,10 @@
 import random
 import networkx as nx
-from lib.utilities import extract_sensor_data, extract_neighbor_sensor_data
+from lib.utils.game_utils import extract_sensor_data, extract_neighbor_sensor_data
 
 def strategy(state):
     """
-    Defines the attacker's strategy to move towards the closest flag.
+    Defines the defender's strategy to move towards the closest attacker.
     
     Parameters:
         state (dict): The current state of the game, including positions and parameters.
@@ -19,44 +19,45 @@ def strategy(state):
         state, flag_positions, flag_weights, agent_params
     )
     
-    closest_flag = None
+    closest_attacker = None
     min_distance = float('inf')
     
-    # Find the closest flag based on shortest path distance
-    for flag in flag_positions:
-        try:
-            # Compute the unweighted shortest path length to the flag
-            dist = nx.shortest_path_length(
-                agent_params.map.graph, source=current_node, target=flag
-            )
-            if dist < min_distance:
-                min_distance = dist
-                closest_flag = flag
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            # Skip if no path exists or node is not found
-            continue
+    # Find the closest attacker based on shortest path distance
+    for attacker in attacker_positions:
+        for flag in flag_positions:
+            try:
+                # Compute the unweighted shortest path length to the attacker
+                dist = nx.shortest_path_length(
+                    agent_params.map.graph, source=attacker, target=flag
+                )
+                if dist < min_distance:
+                    min_distance = dist
+                    closest_attacker = attacker
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                # Skip if no path exists or node is not found
+                continue
 
-    if closest_flag is None:
-        # Fallback: move to a random neighboring node if no flag is reachable
+    if closest_attacker is None:
+        # Fallback: move to a random neighboring node if no attacker is found
         neighbor_data = extract_neighbor_sensor_data(state)
         state['action'] = random.choice(neighbor_data)
         return
 
     try:
-        # Determine the next node towards the closest flag
+        # Determine the next node towards the closest attacker
         next_node = agent_params.map.shortest_path_to(
-            current_node, closest_flag, agent_params.speed
+            current_node, closest_attacker, agent_params.speed
         )
         state['action'] = next_node
     except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
         # Handle cases where the path cannot be found
-        print(f"No path found from red agent at node {current_node} to flag at node {closest_flag}: {e}")
+        print(f"No path found from blue agent at node {current_node} to attacker at node {closest_attacker}: {e}")
         neighbor_data = extract_neighbor_sensor_data(state)
         state['action'] = random.choice(neighbor_data)
 
 def map_strategy(agent_config):
     """
-    Maps each attacker agent to the defined strategy.
+    Maps each defender agent to the defined strategy.
     
     Parameters:
         agent_config (dict): Configuration dictionary for all agents.

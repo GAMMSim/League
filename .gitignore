@@ -7,15 +7,17 @@ __pycache__/
 build/
 cache/
 .DS_Store
-*.pkl
 
 # Self defined libraries
 gamms/
 setup.py
-mkdocs.yml
 docs/
 *.json
-*.txt
+temp/
+archive/
+F*.png
+F*.yml
+tempCodeRunnerFile.py
 
 # Bebug files
 debug/
@@ -42,6 +44,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+policy_*.pkl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -1,7 +1,7 @@
 gamerule:
   version: 1
   author: "The League Team"
-  max_time: 100
+  max_time: 200
   agent:
     attacker:
       speed: 1
@@ -14,7 +14,7 @@ gamerule:
   interaction:
     tagging: both_kill
     capture: kill     
-    prioritize: tagging
+    prioritize: capture
   payoff:
     model: v1
     constants:
