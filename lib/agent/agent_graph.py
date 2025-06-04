@@ -228,9 +228,9 @@ class AgentGraph:
 
     def shortest_path_to(self, source: Any, target: Any, speed: float) -> Any:
         try:
-            from lib.utils.graph_utils import compute_shortest_path_step
+            from lib.utils.strategy_utils import compute_shortest_path_step
         except ModuleNotFoundError:
-            from ..utils.graph_utils import compute_shortest_path_step
+            from ..utils.strategy_utils import compute_shortest_path_step
         return compute_shortest_path_step(self.graph, source, target, speed)
 
     def __str__(self) -> str:

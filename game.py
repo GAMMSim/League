@@ -5,7 +5,10 @@ import networkx as nx
 import gamms
 
 from lib.core.core import *
-import lib.utils.game_utils as GMUTL
+from lib.utils.file_utils import get_directories, export_graph_pkl_config
+from lib.utils.config_utils import load_configuration, load_config_metadata, create_context_with_sensors
+from lib.utils.sensor_utils import create_static_sensors
+from lib.utils.game_utils import *
 import lib.core.time_logger as TLOG
 from typing import Optional, Tuple
 
@@ -36,39 +39,39 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
     error_message = None
 
     try:
-        dirs = GMUTL.get_directories(root_dir)
-        config = GMUTL.load_configuration(config_name, dirs, debug)
+        dirs = get_directories(root_dir)
+        config = load_configuration(config_name, dirs, debug)
         success("Loaded configuration successfully", debug)
 
-        G = GMUTL.load_graph(config, dirs, debug)
+        G = export_graph_pkl_config(config, dirs, debug)
 
         # Create static sensor definitions once
-        static_sensors = GMUTL.create_static_sensors()
+        static_sensors = create_static_sensors()
 
         # Create a new context with sensors for this run
-        ctx = GMUTL.create_context_with_sensors(config, G, visualization, static_sensors, debug)
+        ctx = create_context_with_sensors(config, G, visualization, static_sensors, debug)
 
         # Initialize agents and assign strategies
-        agent_config, agent_params_dict = GMUTL.initialize_agents(ctx, config)
-        GMUTL.assign_strategies(ctx, agent_config, attacker_strategy, defender_strategy)
+        agent_config, agent_params_dict = initialize_agents(ctx, config)
+        assign_strategies(ctx, agent_config, attacker_strategy, defender_strategy)
         success("Assigned strategies successfully", debug)
 
         # Configure visualization and initialize flags
-        GMUTL.configure_visualization(ctx, agent_config, config)
-        GMUTL.initialize_flags(ctx, config)
+        configure_visualization(ctx, agent_config, config)
+        initialize_flags(ctx, config)
 
         # Retrieve game parameters
         max_time = config.get("game", {}).get("max_time", 1000)
         flag_positions = config.get("game", {}).get("flag", {}).get("positions", [])
-        # print("Flag positions:", flag_positions)
-        # if 59 not in flag_positions:
-        #     flag_positions.append(59)
+        print("Flag positions:", flag_positions)
+        if 59 not in flag_positions:
+            flag_positions.append(59)
         flag_weights = config.get("game", {}).get("flag", {}).get("weights")
         interaction_config = config.get("game", {}).get("interaction", {})
         payoff_config = config.get("game", {}).get("payoff", {})
 
         # Initialize the time logger
-        metadata = GMUTL.load_config_metadata(config)
+        metadata = load_config_metadata(config)
         if logger is not None:
             current_metadata = logger.get_metadata()
             merged_metadata = {**current_metadata, **metadata}
@@ -78,10 +81,10 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
         success(f"Starting game with max time: {max_time}", debug)
 
         # Check initial interactions before any moves
-        init_caps, init_tags, attacker_count, defender_count, init_cap_details, init_tag_details = GMUTL.check_agent_interaction(ctx, G, agent_params_dict, flag_positions, interaction_config, time_counter)
+        init_caps, init_tags, attacker_count, defender_count, init_cap_details, init_tag_details = check_agent_interaction(ctx, G, agent_params_dict, flag_positions, interaction_config, time_counter)
         total_captures += init_caps
         total_tags += init_tags
-        payoff += GMUTL.compute_payoff(payoff_config, init_caps, init_tags)
+        payoff += compute_payoff(payoff_config, init_caps, init_tags)
 
         # Log initial state
         initial_step_log = {
@@ -97,7 +100,7 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
             logger.log_data(initial_step_log, time_counter)
 
         # Check if game should terminate after initial state
-        if GMUTL.check_termination(time_counter, max_time, attacker_count, defender_count):
+        if check_termination(time_counter, max_time, attacker_count, defender_count):
             success(f"Game terminated at time {time_counter}", debug)
             return payoff, time_counter, total_captures, total_tags
 
@@ -105,7 +108,7 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
         while not ctx.is_terminated():
             time_counter += 1
             next_actions = {}
-            
+
             try:
                 for agent in ctx.agent.create_iter():
                     state = agent.get_state()
@@ -137,11 +140,11 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
             agent_positions = {agent.name: agent.get_state().get("curr_pos") for agent in ctx.agent.create_iter()}
 
             # Check interactions (captures, tags, etc.)
-            captures, tags, attacker_count, defender_count, capture_details, tag_details = GMUTL.check_agent_interaction(ctx, G, agent_params_dict, flag_positions, interaction_config, time_counter)
+            captures, tags, attacker_count, defender_count, capture_details, tag_details = check_agent_interaction(ctx, G, agent_params_dict, flag_positions, interaction_config, time_counter)
             total_captures += captures
             total_tags += tags
-            payoff += GMUTL.compute_payoff(payoff_config, captures, tags)      
-            
+            payoff += compute_payoff(payoff_config, captures, tags)
+
             step_log = {
                 "agents": agent_positions,
                 "flag_positions": flag_positions,
@@ -154,7 +157,7 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
             if logger is not None:
                 logger.log_data(step_log, time_counter)
 
-            if GMUTL.check_termination(time_counter, max_time, attacker_count, defender_count):
+            if check_termination(time_counter, max_time, attacker_count, defender_count):
                 success(f"Game terminated at time {time_counter}", debug)
                 break
 
@@ -198,5 +201,5 @@ if __name__ == "__main__":
     # You can now specify just the filename and it will be found automatically
     final_payoff, game_time, _, _ = run_game("example_5v5.yml", root_dir=str(root_path), attacker_strategy=attacker, defender_strategy=defender, logger=logger, visualization=True, debug=False)  # This will be found in the nested folders
 
-    logger.write_to_file("example.json", True)
+    # logger.write_to_file("test.json")
     print("Final payoff:", final_payoff)

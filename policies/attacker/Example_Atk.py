@@ -1,6 +1,6 @@
 import random
 import networkx as nx
-from lib.utils.game_utils import extract_sensor_data, extract_neighbor_sensor_data
+from lib.utils.sensor_utils import extract_sensor_data, extract_neighbor_sensor_data
 
 def strategy(state):
     """
