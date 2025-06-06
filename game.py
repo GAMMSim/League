@@ -63,9 +63,6 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
         # Retrieve game parameters
         max_time = config.get("game", {}).get("max_time", 1000)
         flag_positions = config.get("game", {}).get("flag", {}).get("positions", [])
-        print("Flag positions:", flag_positions)
-        if 59 not in flag_positions:
-            flag_positions.append(59)
         flag_weights = config.get("game", {}).get("flag", {}).get("weights")
         interaction_config = config.get("game", {}).get("interaction", {})
         payoff_config = config.get("game", {}).get("payoff", {})
@@ -172,7 +169,6 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
         error(error_msg)
         error_message = f"{error_msg}\n{traceback.format_exc()}"
         traceback.print_exc()
-        raise e
         return payoff, time_counter, total_captures, total_tags
     finally:
         # Always finalize the logger if it exists
