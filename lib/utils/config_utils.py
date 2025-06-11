@@ -58,8 +58,13 @@ def generate_position_with_distribution(graph: nx.Graph, num_nodes: int, dist_ty
     else:
         # Verify that the provided center_node is in the graph
         if center_node not in graph.nodes():
-            error(f"Provided center_node {center_node} is not in the graph.")
-            return None, None
+            warning(f"Provided center_node {center_node} is not in the graph.")
+            try:
+                center_node = random.choice([n for n in graph.nodes() if isinstance(n, int)])
+                info(f"Using center node: {center_node}", debug)
+            except Exception as e:
+                error(f"Error selecting random center node: {e}")
+                return None, None
 
     if dist_type == "uniform":
         positions = distribute_uniform_random(graph, center_node, num_nodes, max_distance=param)
@@ -269,7 +274,12 @@ def generate_single_config(
     output_dir: str,
     default_config_path: str,  # New parameter for the default config file
     debug: Optional[bool] = False,
-    center_node: Optional[int] = None,
+    center_node_flag: Optional[int] = None,
+    center_node_attacker: Optional[int] = None,
+    center_node_defender: Optional[int] = None,
+    custom_flag_positions: Optional[List[int]] = None,
+    custom_attacker_positions: Optional[List[int]] = None,
+    custom_defender_positions: Optional[List[int]] = None,
 ) -> Tuple[bool, str]:
     """
     Generates a single configuration file based on the given parameters.
@@ -307,6 +317,18 @@ def generate_single_config(
         Path to the default configuration YAML file.
     debug : Optional[bool]
         If True, debug messages will be printed during the process.
+    center_node_flag : Optional[int]
+        The center node for flag positions. If None, a random node will be selected.
+    center_node_attacker : Optional[int]
+        The center node for attacker positions. If None, a random node will be selected.
+    center_node_defender : Optional[int]
+        The center node for defender positions. If None, a random node will be selected.
+    custom_flag_positions : Optional[List[int]]
+        Custom flag positions. If provided, this will override the generated positions.
+    custom_attacker_positions : Optional[List[int]]
+        Custom attacker positions. If provided, this will override the generated positions.
+    custom_defender_positions : Optional[List[int]]
+        Custom defender positions. If provided, this will override the generated positions.
 
     Returns:
     --------
@@ -315,20 +337,44 @@ def generate_single_config(
     """
     # Generate positions for flag, attacker, and defender using provided functions.
     # These functions should return positions and a center node.
-    flag_positions, center_node_flag = generate_position_with_distribution(graph, flag_num, flag_dist_type, flag_param, center_node=center_node)
-    if flag_positions is None:
-        error(f"Flag position generation failed for graph {graph_file} with parameters: flag_num={flag_num}, distribution={flag_dist_type}, param={flag_param}")
-        return False
+    if custom_flag_positions is None:
+        flag_positions, center_node_flag = generate_position_with_distribution(graph, flag_num, flag_dist_type, flag_param, center_node=center_node_flag)
+        if flag_positions is None:
+            error(f"Flag position generation failed for graph {graph_file} with parameters: flag_num={flag_num}, distribution={flag_dist_type}, param={flag_param}")
+            return False, ""
+    else:
+        # Use custom flag positions if provided
+        flag_positions = custom_flag_positions
+        center_node_flag = None  # Indicate that positions were manually set
+        flag_num = len(flag_positions)  # Update flag_num based on custom positions
+        flag_dist_type = "handpicked"  
+        flag_param = None  # Indicate that no distribution was used
 
-    attacker_positions, center_node_attacker = generate_position_with_distribution(graph, attacker_num, attacker_dist_type, attacker_param, center_node=center_node)
-    if attacker_positions is None:
-        error(f"Attacker position generation failed for graph {graph_file} with parameters: attacker_num={attacker_num}, distribution={attacker_dist_type}, param={attacker_param}")
-        return False
-
-    defender_positions, center_node_defender = generate_position_with_distribution(graph, defender_num, defender_dist_type, defender_param, center_node=center_node)
-    if defender_positions is None:
-        error(f"Defender position generation failed for graph {graph_file} with parameters: defender_num={defender_num}, distribution={defender_dist_type}, param={defender_param}")
-        return False
+    if custom_attacker_positions is None:
+        attacker_positions, center_node_attacker = generate_position_with_distribution(graph, attacker_num, attacker_dist_type, attacker_param, center_node=center_node_attacker)
+        if attacker_positions is None:
+            error(f"Attacker position generation failed for graph {graph_file} with parameters: attacker_num={attacker_num}, distribution={attacker_dist_type}, param={attacker_param}")
+            return False, ""
+    else:
+        # Use custom attacker positions if provided
+        attacker_positions = custom_attacker_positions
+        center_node_attacker = None
+        attacker_num = len(attacker_positions)  # Update flag_num based on custom positions
+        attacker_dist_type = "handpicked"
+        attacker_param = None  # Indicate that no distribution was used
+    
+    if custom_defender_positions is None:
+        defender_positions, center_node_defender = generate_position_with_distribution(graph, defender_num, defender_dist_type, defender_param, center_node=center_node_defender)
+        if defender_positions is None:
+            error(f"Defender position generation failed for graph {graph_file} with parameters: defender_num={defender_num}, distribution={defender_dist_type}, param={defender_param}")
+            return False, ""
+    else:
+        # Use custom defender positions if provided
+        defender_positions = custom_defender_positions
+        center_node_defender = None
+        defender_num = len(defender_positions)  # Update flag_num based on custom positions
+        defender_dist_type = "handpicked"
+        defender_param = None  # Indicate that no distribution was used
 
     # Build the generated configuration (partial) and compute CONFIG_ID
     generated_config, hash_key = generate_config_parameters(
@@ -364,7 +410,7 @@ def generate_single_config(
     # Write the merged configuration to a YAML file
     filename = f"config_{hash_key}.yml"
     if not write_yaml_config(merged_config, output_dir, filename):
-        return False
+        return False, filename
 
     success(f"Generated configuration: {filename}", debug)
     return True, filename

@@ -12,11 +12,11 @@ import os
 
 try:
     from ..core.core import *
-    from ..utils.file_utils import read_yml_file, export_graph_dsg
+    from ..utils.file_utils import read_yml_file, export_graph_dsg, export_graph_gml, export_graph_generic
     from ..utils.config_utils import extract_positions_from_config
 except ImportError:
     from lib.core.core import *
-    from lib.utils.file_utils import read_yml_file, export_graph_dsg
+    from lib.utils.file_utils import read_yml_file, export_graph_dsg, export_graph_gml, export_graph_generic
     from lib.utils.config_utils import extract_positions_from_config
 
 
@@ -94,13 +94,23 @@ class GraphVisualizer:
                             raise Exception(f"Graph file does not exist at {graph_file_path}.")
 
                         # Load the graph from the specified path
-                        with open(graph_file_path, "rb") as gf:
-                            self.graph = pickle.load(gf)
+                        G = export_graph_generic(graph_file_path, debug=self.debug)
+                        if G is None:
+                            error(f"Failed to load graph from {graph_file_path}.")
+                            raise Exception(f"Failed to load graph from {graph_file_path}.")
+                        self.graph = G
                     elif file_path.endswith(".json"):
                         G = export_graph_dsg(file_path, debug=self.debug)
                         if G is None:
                             error(f"Failed to load graph from {file_path}.")
                             raise Exception(f"Failed to load graph from {file_path}.")
+                        self.graph = G
+                    elif file_path.endswith(".gml"):
+                        G = export_graph_gml(file_path, debug=self.debug)
+                        if G is None:
+                            error(f"Failed to load graph from {file_path}.")
+                            raise Exception(f"Failed to load graph from {file_path}.")
+                        self.graph = G
                     else:
                         self.graph = pickle.load(gf)
                 except Exception as e:
@@ -257,7 +267,7 @@ class GraphVisualizer:
 
     # --- Static Visualization ---
 
-    def _visualize_static(self, save_path: Optional[str] = None, transparent_background: bool = False, quick: Optional[bool] = False) -> None:
+    def _visualize_static(self, save_path: Optional[str] = None, transparent_background: bool = False, quick: Optional[bool] = False, show_ids: Optional[bool] = True) -> None:
         """Internal static visualization using Matplotlib."""
         if quick:
             fig = plt.figure(figsize=(4, 4))
@@ -316,7 +326,7 @@ class GraphVisualizer:
             node_sizes = [s * 0.3 for s in node_sizes]
 
         nx.draw_networkx_nodes(self.graph, pos=node_positions, node_size=node_sizes, node_color=node_colors)
-        if not quick:
+        if not quick and show_ids:
             for node, pos in node_positions.items():
                 plt.text(pos[0], pos[1], str(node), fontsize=8, ha="center", va="center")
         plt.title(f"Graph Visualization: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
@@ -587,7 +597,7 @@ class GraphVisualizer:
 
         screen.blit(tooltip_surface, pos)
 
-    def visualize(self, save_path: Optional[str] = None, transparent_background: Optional[bool] = False) -> None:
+    def visualize(self, save_path: Optional[str] = None, transparent_background: Optional[bool] = False, show_ids: Optional[bool] = True) -> None:
         """
         Visualize the graph based on the mode.
         If mode is "static", use Matplotlib.
@@ -595,7 +605,7 @@ class GraphVisualizer:
         If save_path is provided, save the output.
         """
         if self.mode == "static":
-            self._visualize_static(save_path, transparent_background)
+            self._visualize_static(save_path, transparent_background, show_ids=show_ids)
         elif self.mode == "quick":
             self._visualize_static(save_path, transparent_background=False, quick=True)
         else:

@@ -1,0 +1,120 @@
+agents:
+  attacker_config:
+    attacker_0:
+      capture_radius: 2
+      sensors: &id001
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 8070450532247940172
+    attacker_1:
+      start_node_id: 8070450532247940440
+    attacker_2:
+      start_node_id: 5764607523034235650
+    attacker_3:
+      start_node_id: 8070450532247938510
+    attacker_4:
+      start_node_id: 8070450532247932121
+    attacker_5:
+      start_node_id: 8070450532247939032
+    attacker_6:
+      start_node_id: 5764607523034235811
+    attacker_7:
+      start_node_id: 8070450532247930407
+    attacker_8:
+      start_node_id: 8070450532247940078
+    attacker_9:
+      start_node_id: 5764607523034235969
+  attacker_global: &id003
+    capture_radius: 2
+    sensors: *id001
+    speed: 1
+  defender_config:
+    defender_0:
+      capture_radius: 1
+      sensors: &id002
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 8070450532247940507
+    defender_1:
+      start_node_id: 8070450532247933897
+    defender_2:
+      start_node_id: 8070450532247933357
+    defender_3:
+      start_node_id: 8070450532247929515
+    defender_4:
+      start_node_id: 8070450532247933810
+    defender_5:
+      start_node_id: 8070450532247936515
+    defender_6:
+      start_node_id: 8070450532247936488
+    defender_7:
+      start_node_id: 8070450532247936584
+    defender_8:
+      start_node_id: 8070450532247929659
+    defender_9:
+      start_node_id: 8070450532247938607
+  defender_global: &id004
+    capture_radius: 1
+    sensors: *id002
+    speed: 1
+defaults:
+  attacker_global: *id003
+  defender_global: *id004
+environment:
+  graph_name: west_point_downsampled_N_ds3k.gml
+extra_prameters:
+  CONFIG_ID: 8f0295a7b2
+  parameters:
+    attacker:
+      center_node: 8070450532247939950
+      distribution:
+        param:
+        - 20
+        - 10
+        type: normal
+      number: 10
+    defender:
+      center_node: 5764607523034235417
+      distribution:
+        param:
+        - 20
+        - 10
+        type: normal
+      number: 10
+    flag:
+      center_node: 5764607523034235417
+      distribution:
+        param: 10
+        type: uniform
+      number: 3
+  timestamp: 2025-06-06 02:06:49:072
+game:
+  flag:
+    positions:
+    - 8070450532247935273
+    - 8070450532247941015
+    - 8070450532247938534
+    weights: null
+  interaction: Error
+  max_time: Error
+  payoff: Error
+  rule: V1
+  save_log: false
+visualization:
+  colors:
+    attacker_global: red
+    defender_global: blue
+    flag: green
+  draw_node_id: false
+  game_speed: 2
+  sizes:
+    flag_size: 10
+    global_agent_size: 10
+  visualization_engine: PYGAME
+  window_size:
+  - 1980
+  - 1080

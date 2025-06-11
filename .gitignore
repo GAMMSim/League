@@ -15,13 +15,15 @@ docs/
 *.json
 temp/
 archive/
-F*.png
-F*.yml
+# F*.png
+# F*.yml
 tempCodeRunnerFile.py
+extra/
 
 # Bebug files
 debug/
 debug.yaml
+test*
 
 # C extensions
 *.so

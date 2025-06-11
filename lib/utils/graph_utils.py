@@ -16,45 +16,107 @@ except ModuleNotFoundError:
 @typechecked
 def cast_to_multidigraph(G: nx.DiGraph, debug: Optional[bool] = False) -> nx.MultiDiGraph:
     """
-    Convert a DiGraph to a MultiDiGraph ensuring that if an edge (u, v)
-    exists, a reverse edge (v, u) also exists. If the reverse edge is missing,
-    it is added. If the edge data contains a 'linestring', its coordinates
-    are reversed for the reverse edge.
+    Convert a DiGraph to a MultiDiGraph ensuring bidirectionality and unique edge IDs.
 
-    Also prints the number of reverse edges that were added.
+    For each directed edge (u, v) in G:
+      - Assign a fresh integer 'id' to (u, v).
+      - If the reverse edge (v, u) does not exist in G, add it with its own new 'id'.
+        If the edge data contains a 'linestring', reverse its coordinates for the reverse edge.
 
     Args:
-        G (nx.DiGraph): Input directed graph.
+        G (nx.DiGraph): Input directed graph. May have node and edge attributes.
+        debug (Optional[bool]): If True, print debug/info messages.
 
     Returns:
-        nx.MultiDiGraph: A MultiDiGraph with ensured bidirectional edges.
+        nx.MultiDiGraph: A MultiDiGraph with bidirectional edges and unique 'id' for every edge.
     """
     MD = nx.MultiDiGraph()
 
-    # Add all nodes with attributes
     MD.add_nodes_from(G.nodes(data=True))
 
-    # Counter for reverse edges added
-    added_count = 0
+    next_edge_id = 0
+    added_reverse_count = 0
 
-    # Process each edge in the original graph
     for u, v, data in G.edges(data=True):
-        # Add original edge
-        MD.add_edge(u, v, **data)
+        original_data = deepcopy(data) if data is not None else {}
+        original_data["id"] = next_edge_id
+        MD.add_edge(u, v, **original_data)
+        next_edge_id += 1
 
-        # Check if the reverse edge (v, u) exists in the original graph
         if not G.has_edge(v, u):
-            # Create a deep copy of the data for the reverse edge
-            rev_data = deepcopy(data)
-            # If a 'linestring' is present, reverse its coordinates
+            rev_data = deepcopy(data) if data is not None else {}
             if "linestring" in rev_data and isinstance(rev_data["linestring"], LineString):
                 rev_data["linestring"] = LineString(rev_data["linestring"].coords[::-1])
+            rev_data["id"] = next_edge_id
             MD.add_edge(v, u, **rev_data)
-            added_count += 1
+            next_edge_id += 1
+            added_reverse_count += 1
+        else:
+            existing_data = deepcopy(G[v][u]) if G[v][u] is not None else {}
+            if "linestring" in existing_data and isinstance(existing_data["linestring"], LineString):
+                existing_data["linestring"] = LineString(existing_data["linestring"].coords[::-1])
+            existing_data["id"] = next_edge_id
+            MD.add_edge(v, u, **existing_data)
+            next_edge_id += 1
 
-    info(f"Added {added_count} reverse edge(s) to ensure bidirectionality.", debug)
-    success(f"Converted DiGraph to MultiDiGraph with {MD.number_of_nodes()} nodes and {MD.number_of_edges()} edges.", debug)
+    info(f"Added {added_reverse_count} reverse edge(s) to ensure bidirectionality.", debug)
+    success(
+        f"Converted DiGraph to MultiDiGraph with {MD.number_of_nodes()} nodes and {MD.number_of_edges()} edges.",
+        debug
+    )
     return MD
+
+
+def convert_gml_to_multidigraph(G: nx.Graph, scale_factor: float = 1, offset_x: float = 0, offset_y: float = 0, debug: Optional[bool] = False) -> nx.MultiDiGraph:
+    """
+    Convert a normalized 3D graph to a MultiDiGraph with 2D coordinates and LineString edges.
+
+    Args:
+        G: Input graph with normalized coordinates
+        scale_factor: Scaling factor for coordinates
+        offset_x: X coordinate offset
+        offset_y: Y coordinate offset
+        debug: Debug flag
+
+    Returns:
+        nx.MultiDiGraph: Spatial MultiDiGraph with LineString edges
+    """
+    try: 
+        # Create new DiGraph
+        spatial_graph = nx.DiGraph()
+
+        # Transform node coordinates, casting the ID to int
+        for node_str, data in G.nodes(data=True):
+            node_int = int(node_str)  # convert "5764607…" → 5764607 (or however your IDs parse)
+            new_x = data["x"] * scale_factor + offset_x
+            new_y = data["y"] * scale_factor + offset_y
+            spatial_graph.add_node(node_int, x=new_x, y=new_y)
+
+        # Add edges with LineString geometry and length
+        edge_id = 0
+        for u_str, v_str, data in G.edges(data=True):
+            u = int(u_str)
+            v = int(v_str)
+
+            u_coords = spatial_graph.nodes[u]
+            v_coords = spatial_graph.nodes[v]
+
+            linestring = LineString([
+                (u_coords["x"], u_coords["y"]),
+                (v_coords["x"], v_coords["y"])
+            ])
+            length = ((v_coords["x"] - u_coords["x"])**2 + (v_coords["y"] - u_coords["y"])**2)**0.5
+
+            spatial_graph.add_edge(u, v, id=edge_id, linestring=linestring, length=length)
+            edge_id += 1
+    except Exception as e:
+        error(f"Error converting gml to spatial DiGraph: {e}")
+        raise Exception(f"Error converting to gml spatial DiGraph: {e}")
+
+    success(f"Converted to spatial DiGraph with {spatial_graph.number_of_nodes()} nodes and {spatial_graph.number_of_edges()} edges", debug)
+
+    # Convert to MultiDiGraph with bidirectional edges
+    return cast_to_multidigraph(spatial_graph, debug)
 
 
 @typechecked
@@ -373,6 +435,7 @@ def compute_x_neighbors(G: nx.MultiDiGraph, nodes: Union[List[Any], Set[Any]], d
 
     return result
 
+
 # Example usage:
 # if __name__ == "__main__":
 #     try:
@@ -383,7 +446,7 @@ def compute_x_neighbors(G: nx.MultiDiGraph, nodes: Union[List[Any], Set[Any]], d
 #     except ModuleNotFoundError:
 #         from ..core.core import *
 #         from visual import graph_visualizer as gfvis
-    
+
 #     # G = generate_random_delaunay_graph(n_points=400, side=10, seed=42, debug=True)
 #     # G = generate_simple_grid(rows=20, cols=20, debug=True)
 #     # G = generate_lattice_grid(rows=20, cols=20, debug=True)
@@ -419,38 +482,38 @@ def compute_x_neighbors(G: nx.MultiDiGraph, nodes: Union[List[Any], Set[Any]], d
 
 #     visualizer.visualize()
 
-    # root_folder = add_root_folder_to_sys_path()
-    # graph_file_path = os.path.join(root_folder, "data", "graphs", "graph_200_200.pkl")
-    # G = export_graph(graph_file_path)
+# root_folder = add_root_folder_to_sys_path()
+# graph_file_path = os.path.join(root_folder, "data", "graphs", "graph_200_200.pkl")
+# G = export_graph(graph_file_path)
 
-    # flag_nodes = [251, 67]  # Example positions in the grid
-    # defender_nodes = [152, 153]  # Example positions in the grid
-    # attacker_nodes = [3, 4]  # Example positions in the grid
+# flag_nodes = [251, 67]  # Example positions in the grid
+# defender_nodes = [152, 153]  # Example positions in the grid
+# attacker_nodes = [3, 4]  # Example positions in the grid
 
-    # target_nodes = compute_x_neighbors(G, set(flag_nodes), 2)
+# target_nodes = compute_x_neighbors(G, set(flag_nodes), 2)
 
-    # attraction_distances_dict = compute_attraction_distances(G, set(defender_nodes), debug=True)
-    # # attraction_distances_dict = None
+# attraction_distances_dict = compute_attraction_distances(G, set(defender_nodes), debug=True)
+# # attraction_distances_dict = None
 
-    # H, P = compute_convex_hull_and_perimeter(G, target_nodes, visualize_steps=False, attraction_distances_dict=attraction_distances_dict)
-    # print(f"Convex Hull: {H}")
-    # print(f"Perimeter: {P}")
+# H, P = compute_convex_hull_and_perimeter(G, target_nodes, visualize_steps=False, attraction_distances_dict=attraction_distances_dict)
+# print(f"Convex Hull: {H}")
+# print(f"Perimeter: {P}")
 
-    # # Create a GraphVisualizer instance in interactive mode
-    # gv = gfvis.GraphVisualizer(G=G, mode="interactive", extra_info=None, node_size=100, node_color="lightgray", transparent_alpha=0.3)
+# # Create a GraphVisualizer instance in interactive mode
+# gv = gfvis.GraphVisualizer(G=G, mode="interactive", extra_info=None, node_size=100, node_color="lightgray", transparent_alpha=0.3)
 
-    # # Color the flag nodes with solid green
-    # gv.color_nodes(flag_nodes, color="green", name="Flag Nodes")
-    # hull_without_flags = [node for node in H if node not in flag_nodes]
-    # gv.color_nodes(hull_without_flags, color="green", mode="transparent", name="Convex Hull")
+# # Color the flag nodes with solid green
+# gv.color_nodes(flag_nodes, color="green", name="Flag Nodes")
+# hull_without_flags = [node for node in H if node not in flag_nodes]
+# gv.color_nodes(hull_without_flags, color="green", mode="transparent", name="Convex Hull")
 
-    # gv.color_nodes(attacker_nodes, color="red", name="Attacker")
+# gv.color_nodes(attacker_nodes, color="red", name="Attacker")
 
-    # perimeter_without_flags = [node for node in P if node not in flag_nodes]
-    # # perimeter_without_flags = [node for node in perimeter_without_flags if node not in defender_capture_radius]
-    # gv.color_nodes(perimeter_without_flags, color="yellow", mode="solid", name="Perimeter")
-    # gv.color_nodes(defender_nodes, color="blue", name="Defender")
-    # # gv.color_nodes(defender_capture_radius, color="lightblue", mode="solid", name="Defender Capture Radius")
+# perimeter_without_flags = [node for node in P if node not in flag_nodes]
+# # perimeter_without_flags = [node for node in perimeter_without_flags if node not in defender_capture_radius]
+# gv.color_nodes(perimeter_without_flags, color="yellow", mode="solid", name="Perimeter")
+# gv.color_nodes(defender_nodes, color="blue", name="Defender")
+# # gv.color_nodes(defender_capture_radius, color="lightblue", mode="solid", name="Defender Capture Radius")
 
-    # # # Visualize the graph using the unified visualize() method.
-    # gv.visualize("test.png")  # You can also pass a save path if desired, e.g., gv.visualize("output.png")
+# # # Visualize the graph using the unified visualize() method.
+# gv.visualize("test.png")  # You can also pass a save path if desired, e.g., gv.visualize("output.png")
