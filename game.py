@@ -5,7 +5,7 @@ import networkx as nx
 import gamms
 
 from lib.core.core import *
-from lib.utils.file_utils import get_directories, export_graph_pkl_config
+from lib.utils.file_utils import get_directories, export_graph_config
 from lib.utils.config_utils import load_configuration, load_config_metadata, create_context_with_sensors
 from lib.utils.sensor_utils import create_static_sensors
 from lib.utils.game_utils import *
@@ -43,13 +43,13 @@ def run_game(config_name: str, root_dir: str, attacker_strategy, defender_strate
         config = load_configuration(config_name, dirs, debug)
         success("Loaded configuration successfully", debug)
 
-        G = export_graph_pkl_config(config, dirs, debug)
+        G = export_graph_config(config, dirs, debug)
 
         # Create static sensor definitions once
         static_sensors = create_static_sensors()
 
         # Create a new context with sensors for this run
-        ctx = create_context_with_sensors(config, G, visualization, static_sensors, debug)
+        ctx = create_context_with_sensors(config, G, visualization=False, static_sensors=static_sensors, debug=debug)
 
         # Initialize agents and assign strategies
         agent_config, agent_params_dict = initialize_agents(ctx, config)
@@ -191,11 +191,21 @@ if __name__ == "__main__":
     import policies.defender.Example_Def as defender
 
     RESULT_PATH = os.path.join(root_path, "data/result")
-    logger = TLOG.TimeLogger("test")
+    atk_name = attacker.__name__.split(".")[-1] 
+    def_name = defender.__name__.split(".")[-1] 
+
+    print(atk_name, def_name) 
+    logger = TLOG.TimeLogger("test", path=RESULT_PATH)
+    logger.set_metadata(
+        {
+            "attacker": atk_name,
+            "defender": def_name,
+        }
+    )
 
     # Example of using the updated runner with the new file structure
     # You can now specify just the filename and it will be found automatically
-    final_payoff, game_time, _, _ = run_game("example_5v5.yml", root_dir=str(root_path), attacker_strategy=attacker, defender_strategy=defender, logger=logger, visualization=True, debug=False)  # This will be found in the nested folders
+    final_payoff, game_time, _, _ = run_game("example_5v5.yml", root_dir=str(root_path), attacker_strategy=attacker, defender_strategy=defender, logger=logger, visualization=True, debug=True)  # This will be found in the nested folders
 
-    # logger.write_to_file("test.json")
+    logger.write_to_file("example.json")
     print("Final payoff:", final_payoff)

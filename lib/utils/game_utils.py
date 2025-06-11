@@ -199,7 +199,6 @@ def configure_visualization(ctx: Any, agent_config: Dict[str, Dict[str, Any]], c
 
     # Set global graph visualization parameters
     ctx.visual.set_graph_visual(width=width, height=height, draw_id=draw_node_id, node_color=node_color, edge_color=edge_color)
-
     # Set game speed
     ctx.visual._sim_time_constant = game_speed
 

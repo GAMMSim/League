@@ -8,10 +8,10 @@ import os
 
 try:
     from lib.core.core import *
-    from lib.utils.graph_utils import cast_to_multidigraph
+    from lib.utils.graph_utils import cast_to_multidigraph, convert_gml_to_multidigraph
 except ImportError:
     from ..core.core import *
-    from ..utils.graph_utils import cast_to_multidigraph
+    from ..utils.graph_utils import cast_to_multidigraph, convert_gml_to_multidigraph
 
 
 @typechecked
@@ -125,13 +125,13 @@ def get_directories(root_dir: str) -> dict:
 
 
 @typechecked
-def export_graph_pkl_config(config: dict, dirs: dict, debug: bool = False) -> nx.MultiDiGraph:
+def export_graph_config(config: dict, dirs: dict, debug: bool = False) -> nx.MultiDiGraph:
     """
     Load the graph from a pickle file specified in the configuration.
     """
     graph_name = config["environment"]["graph_name"]
     graph_path = os.path.join(dirs["graph"], graph_name)
-    G = export_graph_pkl(graph_path)
+    G = export_graph_generic(graph_path)
     if not isinstance(G, nx.MultiDiGraph):
         warning(f"Graph {graph_name} is not a MultiDiGraph!")
     success(f"Loaded graph: {graph_name}", debug)
@@ -268,12 +268,13 @@ def export_graph_dsg(path: Union[str, Path], debug: bool = False) -> nx.MultiDiG
         Exception: If loading the DSG or converting to a MultiDiGraph fails.
     """
     from math import sqrt
+
     try:
         import spark_dsg as dsg
     except ImportError:
         error("spark_dsg module is not installed. Please install it to use this function.")
         raise ImportError("spark_dsg module is required for DSG operations.")
-    
+
     warning("Calling export_graph_dsg() function, this function is not tested yet, please use with caution.", True)
     # Normalize path and verify existence
     dsg_path = Path(path)
@@ -327,3 +328,77 @@ def export_graph_dsg(path: Union[str, Path], debug: bool = False) -> nx.MultiDiG
     success(f"Exported DSG Places subgraph: {nx_places.number_of_nodes()} nodes, " f"{nx_places.number_of_edges()} edges.", debug)
 
     return nx_places
+
+
+@typechecked
+def export_graph_gml(filename: str, scale_factor: float = 1, offset_x: float = 0, offset_y: float = 0, debug: bool = False) -> nx.MultiDiGraph:
+    """
+    Load a GML file and convert it to a MultiDiGraph with spatial attributes.
+
+    This function verifies that the specified GML file exists, loads it as a NetworkX graph,
+    then converts it to a MultiDiGraph with 2D spatial coordinates and LineString edges
+    matching the format expected by the simulator.
+
+    Parameters:
+        filename (str): The path to the GML file containing the graph.
+        scale_factor (float): Scaling factor for coordinates. Defaults to 600000.
+        offset_x (float): X coordinate offset. Defaults to 586000.
+        offset_y (float): Y coordinate offset. Defaults to 4582000.
+        debug (bool): Flag indicating whether to print debug messages. Defaults to False.
+
+    Returns:
+        nx.MultiDiGraph: The converted spatial multigraph.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        Exception: For errors during loading or converting the graph.
+    """
+    if not os.path.exists(filename):
+        error(f"GML file does not exist at {filename}.")
+        raise FileNotFoundError(f"GML file does not exist at {filename}.")
+
+    try:
+        G = nx.read_gml(filename)
+        success(f"GML file loaded from {filename} with {len(G.nodes)} nodes.", debug)
+    except Exception as e:
+        error(f"Error loading GML file from {filename}: {e}")
+        raise Exception(f"Error loading GML file from {filename}: {e}")
+
+    # Convert to MultiDiGraph with spatial attributes
+    return convert_gml_to_multidigraph(G, scale_factor, offset_x, offset_y, debug)
+
+
+@typechecked
+def export_graph_generic(filename: str, debug: bool = False) -> nx.MultiDiGraph:
+    """
+    Load a generic graph file and convert it to a MultiDiGraph.
+
+    This function verifies that the specified file exists, attempts to load it as a NetworkX graph,
+    and then converts it to a MultiDiGraph if necessary.
+
+    Parameters:
+        filename (str): The path to the graph file.
+        debug (bool): Flag indicating whether to print debug messages. Defaults to False.
+
+    Returns:
+        nx.MultiDiGraph: The loaded and converted graph.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        Exception: For errors during loading or converting the graph.
+    """
+    if not os.path.exists(filename):
+        error(f"Graph file does not exist at {filename}.")
+        raise FileNotFoundError(f"Graph file does not exist at {filename}.")
+    
+    # Check the file extension
+    file_extension = os.path.splitext(filename)[1].lower()
+    if file_extension == ".gml":
+        return export_graph_gml(filename, debug=debug)
+    elif file_extension == ".pkl":
+        return export_graph_pkl(filename, debug=debug)
+    elif file_extension == ".json":
+        return export_graph_dsg(filename, debug=debug)
+    else:
+        error(f"Unsupported graph file format: {file_extension}. Supported formats are .gml and .pkl.")
+        raise Exception(f"Unsupported graph file format: {file_extension}. Supported formats are .gml and .pkl.")
