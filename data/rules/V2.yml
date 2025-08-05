@@ -1,0 +1,27 @@
+version: 2
+author: "The League Team"
+gamerule:
+  game:
+    max_time: 200
+    interaction:
+      tagging: both_kill
+      capture: kill
+      prioritize: tagging
+    payoff:
+      model: V2_zero_sum
+      constants:
+        alpha_capture: 1
+        beta_capture: 1
+        alpha_killed: 0.5
+        beta_killed: 0.5
+  agents:
+    alpha_global:
+      speed: 1
+      capture_radius: 2       
+      tagging_radius: 1
+      sensors: ["map", "agent", "neighbor"]
+    beta_global:
+      speed: 1
+      capture_radius: 2
+      tagging_radius: 1
+      sensors: ["map", "agent", "neighbor"]

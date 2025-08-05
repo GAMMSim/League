@@ -1,6 +1,6 @@
 from networkx.algorithms.planarity import check_planarity
 from matplotlib.colors import to_rgba
-from typeguard import typechecked
+from typeguard import config, typechecked
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -11,11 +11,11 @@ import sys
 import os
 
 try:
-    from ..core.core import *
+    from ..core.console import *
     from ..utils.file_utils import read_yml_file, export_graph_dsg, export_graph_gml, export_graph_generic
     from ..utils.config_utils import extract_positions_from_config
 except ImportError:
-    from lib.core.core import *
+    from lib.core.console import *
     from lib.utils.file_utils import read_yml_file, export_graph_dsg, export_graph_gml, export_graph_generic
     from lib.utils.config_utils import extract_positions_from_config
 
@@ -58,7 +58,8 @@ class GraphVisualizer:
 
         attackers_positions = []
         defenders_positions = []
-        flag_positions = []
+        alpha_flag_positions = []
+        beta_flag_positions = []
         if file_path:
             if not os.path.exists(file_path):
                 error(f"File does not exist at {file_path}.")
@@ -69,7 +70,7 @@ class GraphVisualizer:
                     if file_path.endswith(".yml"):
                         warning("Loading graph from a config file.")
                         config = read_yml_file(file_path)
-                        attackers_positions, defenders_positions, flag_positions, graph_name = extract_positions_from_config(config)
+                        attackers_positions, defenders_positions, alpha_flag_positions, beta_flag_positions, graph_name = extract_positions_from_config(config)
                         current_dir = os.path.dirname(file_path)
                         root_dir = None
                         while current_dir != '/':
@@ -166,10 +167,13 @@ class GraphVisualizer:
             self.color_nodes(attackers_positions, "red", "solid", "Attackers", 1.5)
         if defenders_positions:
             self.color_nodes(defenders_positions, "blue", "solid", "Defenders", 1.5)
-        if flag_positions:
-            self.color_nodes(flag_positions, "green", "solid", "Flags", 1.5)
+        if alpha_flag_positions:
+            self.color_nodes(alpha_flag_positions, "green", "solid", "Alpha Flags", 1.5)
+        if beta_flag_positions:
+            self.color_nodes(beta_flag_positions, "yellow", "solid", "Beta Flags", 1.5)
 
-        success("Graph visualizer initialized successfully.", self.debug)
+        if self.debug:
+            success("Graph visualizer initialized successfully.")
 
     def color_nodes(self, node_list: list[int], color: str, mode: str = "solid", name: Optional[str] = None, size_multiplier: float = 1.0) -> None:
         """Color a list of nodes with the specified color and transparency mode."""
@@ -182,7 +186,9 @@ class GraphVisualizer:
                 self.node_size_multiplier[node] = size_multiplier
             else:
                 warning(f"Node {node} not found in the graph")
-        success(f"Colored {len(node_list)} nodes with {color} ({mode})", self.debug)
+        
+        if self.debug:
+            success(f"Colored {len(node_list)} nodes with {color} ({mode})")
 
     def remove_node_coloring(self, nodes: Optional[list[int]] = None, name: Optional[str] = None) -> None:
         warning("This function has not been tested yet.")
@@ -199,13 +205,15 @@ class GraphVisualizer:
                 self.node_color_mapping.pop(node, None)
                 self.node_transparency.pop(node, None)
                 self.node_size_multiplier.pop(node, None)
-        success("Node coloring removed successfully.", self.debug)
+        
+        if self.debug:
+            success("Node coloring removed successfully.")
 
     def _simple_layout(self) -> None:
         """Rearrange the graph into a balanced simple planar layout with straight edges."""
         is_planar, _ = check_planarity(self.graph)
         if not is_planar:
-            error("The provided graph is not planar.", self.debug)
+            error("The provided graph is not planar.")
             raise ValueError("The provided graph is not planar.")
 
         # Compute planar layout
@@ -238,7 +246,8 @@ class GraphVisualizer:
             if "linestring" in self.graph.edges[u, v, key]:
                 del self.graph.edges[u, v, key]["linestring"]
 
-        success("Graph relayouted to simple planar successfully with improved spacing.", self.debug)
+        if self.debug:
+            success("Graph relayouted to simple planar successfully with improved spacing.")
 
     def _compute_node_positions(self) -> Dict:
         """Compute and return node positions; use provided x,y attributes or fall back to spring layout."""
@@ -249,7 +258,9 @@ class GraphVisualizer:
         if not node_positions:
             warning("No node positions found. Using spring layout.")
             node_positions = nx.spring_layout(self.graph)
-        success(f"Computed positions for {len(node_positions)} nodes.", self.debug)
+        
+        if self.debug:
+            success(f"Computed positions for {len(node_positions)} nodes.")
         return node_positions
 
     def _compute_graph_bounds(self, positions: Dict) -> Tuple:
@@ -297,7 +308,9 @@ class GraphVisualizer:
             except Exception as e:
                 warning(f"Exception {e} while drawing edge {u} -> {v}. Skipping.")
                 continue
-        success("Edges drawn successfully.", self.debug)
+        
+        if self.debug:
+            success("Edges drawn successfully.")
 
         node_colors = []
         node_sizes = []
@@ -511,28 +524,6 @@ class GraphVisualizer:
                 pygame.draw.circle(node_surface, self.dynamic_selection_color, (center, center), node_radius + 4, self.dynamic_selection_outline_thickness)
             overlay.blit(node_surface, (pos[0] - center, pos[1] - center))
 
-    def _display_info(self, screen: pygame.Surface, info_font: pygame.font.Font) -> None:
-        """Display extra information in the top left."""
-        if self.extra_info:
-            extra_text: str = "\n".join(f"{k}: {v}" for k, v in self.extra_info.items())
-            for i, line in enumerate(extra_text.split("\n")):
-                text = info_font.render(line, True, (0, 0, 0))
-                screen.blit(text, (10, 10 + i * 20))
-
-    def _display_selected(self, screen: pygame.Surface, info_font: pygame.font.Font, screen_size: Tuple[int, int], selected_nodes: List[int]) -> None:
-        """Display selected node IDs in the top right."""
-        if selected_nodes:
-            selected_text: str = "Selected: " + ", ".join(str(n) for n in selected_nodes)
-            text = info_font.render(selected_text, True, (0, 0, 0))
-            screen.blit(text, (screen_size[0] - text.get_width() - 10, 10))
-
-    def _display_instructions(self, screen: pygame.Surface, info_font: pygame.font.Font, screen_size: Tuple[int, int]) -> None:
-        """Display instructions in the bottom left."""
-        instructions: List[str] = ["W/A/S/D: Pan (adaptive)", "Mouse Drag: Pan", "Mouse Wheel: Zoom", "R: Recenter", "Click on node: Toggle selection", "Backspace: Clear selection", "Hover on node: Show node number", "Esc: Quit"]
-        for i, line in enumerate(instructions):
-            text = info_font.render(line, True, (0, 0, 0))
-            screen.blit(text, (10, screen_size[1] - (len(instructions) - i) * 20 - 10))
-
     def _draw_tooltip(
         self,
         screen: pygame.Surface,
@@ -619,7 +610,7 @@ class GraphVisualizer:
 
             node_positions: Dict[Any, Tuple[float, float]] = self._compute_node_positions()
             if not node_positions:
-                error("No node positions available. Exiting dynamic visualization.", self.debug)
+                error("No node positions available. Exiting dynamic visualization.")
                 pygame.quit()
                 sys.exit()
 
@@ -795,7 +786,8 @@ class GraphVisualizer:
                         # Regular save with background
                         pygame.image.save(screen, save_path)
 
-                    success(f"Dynamic graph screenshot saved to {save_path}" + (" with transparent background" if transparent_background else ""), self.debug)
+                    if self.debug:
+                        success(f"Dynamic graph screenshot saved to {save_path}" + (" with transparent background" if transparent_background else ""))
                     initial_frame_captured = True
 
             pygame.quit()

@@ -1,0 +1,109 @@
+agents:
+  alpha_config:
+    alpha_0:
+      capture_radius: 2
+      sensors: &id001
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 45  # Near alpha flags
+    alpha_1:
+      start_node_id: 50  # Clustered with alpha team
+    alpha_2:
+      start_node_id: 55  # Clustered with alpha team
+    alpha_3:
+      start_node_id: 60  # Clustered with alpha team
+    alpha_4:
+      start_node_id: 65  # Clustered with alpha team
+  alpha_global: &id003
+    capture_radius: 2
+    sensors: *id001
+    speed: 1
+  beta_config:
+    beta_0:
+      capture_radius: 2
+      sensors: &id002
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 172  # Near beta flags
+    beta_1:
+      start_node_id: 175  # Clustered with beta team
+    beta_2:
+      start_node_id: 180  # Clustered with beta team
+    beta_3:
+      start_node_id: 185  # Clustered with beta team
+    beta_4:
+      start_node_id: 190  # Clustered with beta team
+  beta_global: &id004
+    capture_radius: 2
+    sensors: *id002
+    speed: 1
+defaults:
+  alpha_global: *id003
+  beta_global: *id004
+environment:
+  graph_name: graph_200_200_.pkl
+extra_parameters:
+  CONFIG_ID: d1f062d21d
+  parameters:
+    alpha:
+      center_node: 50   # Alpha team spawn area
+      distribution:
+        param:
+        - 5
+        - 2
+        type: normal
+      number: 5
+    beta:
+      center_node: 175  # Beta team spawn area (far from alpha)
+      distribution:
+        param:
+        - 5
+        - 2
+        type: normal
+      number: 5
+    alpha_flags:
+      center_node: 45   # Blue flags near blue team
+      distribution:
+        param: 3
+        type: uniform
+      number: 2
+    beta_flags:
+      center_node: 172  # Red flags near red team
+      distribution:
+        param: 3
+        type: uniform
+      number: 2
+  timestamp: 2025-04-18 12:27:27:932
+game:
+  flags:
+    alpha_positions:
+    - 40   # Blue flags in alpha territory
+    - 48
+    beta_positions:
+    - 170  # Red flags in beta territory
+    - 175
+    weights: null
+  interaction: Error
+  max_time: Error
+  payoff: Error
+  rule: V2
+  save_log: false
+visualization:
+  colors:
+    alpha_global: blue     # Blue team
+    beta_global: red       # Red team  
+    alpha_flag: blue       # Blue flags with blue team
+    beta_flag: red         # Red flags with red team
+  draw_node_id: false
+  game_speed: 2
+  sizes:
+    flag_size: 10
+    global_agent_size: 10
+  visualization_engine: PYGAME
+  window_size:
+  - 1980
+  - 1080

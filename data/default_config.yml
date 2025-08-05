@@ -1,4 +1,4 @@
-# Default configuration file template
+# Default configuration file template for Symmetric Alpha-Beta Team Game
 
 # 1. GAME RULES AND MECHANICS
 game:
@@ -7,37 +7,48 @@ game:
   save_log: false
   interaction: "Error"
   payoff: "Error"
-  flag:
-    positions: 2
+  flags:
+    alpha_positions: []
+    beta_positions: []
     weights: null
 
 # 2. AGENT PARAMETERS
 
-# Define default globals for attackers and defenders
+# Define default globals for both teams
 defaults:
-  attacker_global: &default_attacker_global
+  alpha_global: &default_alpha_global
     speed: 1
-    capture_radius: 2
+    capture_radius: 2      # Radius for capturing flags
+    tagging_radius: 1      # Radius for combat with other agents
     sensors: ["map", "agent", "neighbor"]
-  defender_global: &default_defender_global
+  beta_global: &default_beta_global
     speed: 1
-    capture_radius: 1
+    capture_radius: 2      # Radius for capturing flags
+    tagging_radius: 1      # Radius for combat with other agents
     sensors: ["map", "agent", "neighbor"]
 
 agents:
-  attacker_global: *default_attacker_global
-  attacker_config:
-    # When creating new attacker configurations, if a parameter is not provided,
+  alpha_global: *default_alpha_global
+  alpha_config:
+    # When creating new alpha team configurations, if a parameter is not provided,
     # you can merge the global default values.
-    attacker_0:
-      <<: *default_attacker_global
+    alpha_0:
+      <<: *default_alpha_global
       start_node_id: 0
+      # You can override individual radii here if needed:
+      # capture_radius: 3
+      # tagging_radius: 2
 
-  defender_global: *default_defender_global
-  defender_config:
-    defender_0:
-      <<: *default_defender_global
+  beta_global: *default_beta_global
+  beta_config:
+    # When creating new beta team configurations, if a parameter is not provided,
+    # you can merge the global default values.
+    beta_0:
+      <<: *default_beta_global
       start_node_id: 1
+      # You can override individual radii here if needed:
+      # capture_radius: 3
+      # tagging_radius: 2
 
 # 3. ENVIRONMENT PARAMETERS
 environment:
@@ -45,17 +56,18 @@ environment:
 
 # 4. VISUALIZATION PARAMETERS
 visualization:
-  window_size: [1980, 1080]
+  window_size: [3008, 1692]
   game_speed: 2
   draw_node_id: false
   visualization_engine: "PYGAME"
   colors:
-    attacker_global: "red"
-    defender_global: "blue"
-    flag: "green"
+    alpha_global: "blue"
+    beta_global: "red"
+    alpha_flag: "blue"
+    beta_flag: "red"
   sizes:
-    flag_size: 10
-    global_agent_size: 10
+    flag_size: 18
+    global_agent_size: 13
 
 # 5. EXTRA PARAMETERS
-extra_prameters: null
+extra_parameters: null

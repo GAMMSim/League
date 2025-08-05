@@ -6,11 +6,11 @@ import gamms
 import os
 
 try:
-    from lib.core.core import *
+    from lib.core.console import *
     from lib.utils.distribution import *
     from lib.utils.file_utils import read_yml_file, write_yaml_config
 except ImportError:
-    from ..core.core import *
+    from ..core.console import *
     from ..utils.distribution import *
     from ..utils.file_utils import read_yml_file, write_yaml_config
 
@@ -61,7 +61,8 @@ def generate_position_with_distribution(graph: nx.Graph, num_nodes: int, dist_ty
             warning(f"Provided center_node {center_node} is not in the graph.")
             try:
                 center_node = random.choice([n for n in graph.nodes() if isinstance(n, int)])
-                info(f"Using center node: {center_node}", debug)
+                if debug:
+                    info(f"Using center node: {center_node}")
             except Exception as e:
                 error(f"Error selecting random center node: {e}")
                 return None, None
@@ -93,7 +94,9 @@ def generate_position_with_distribution(graph: nx.Graph, num_nodes: int, dist_ty
     else:
         warning(f"Distribution type '{dist_type}' not recognized. Using default center positions.")
         positions = [center_node] * num_nodes
-    info(f"Generated {num_nodes} positions using distribution: {dist_type}", debug)
+    
+    if debug:
+        info(f"Generated {num_nodes} positions using distribution: {dist_type}")
     return positions, center_node
 
 
@@ -136,20 +139,24 @@ def recursive_update(default: Dict, override: Dict, force: bool, debug: Optional
                 if key in default:
                     # Check if the keys are the same
                     if default[key] != value:
-                        warning(f"Overriding key '{key}': {default[key]} -> {value}", debug)
+                        if debug:
+                            warning(f"Overriding key '{key}': {default[key]} -> {value}")
                         default[key] = value
                 else:
-                    info(f"Key '{key}' not found in original config. Adding with value: {value}", debug)
+                    if debug:
+                        info(f"Key '{key}' not found in original config. Adding with value: {value}")
                     default[key] = value
             else:
                 # Force is False: Only override if key is missing or its value is None or "Error".
                 if key in default:
                     current = default.get(key)
                     if current is None or current == "Error":
-                        info(f"Key '{key}' is missing or invalid (current: {current}). Setting to: {value}", debug)
+                        if debug:
+                            info(f"Key '{key}' is missing or invalid (current: {current}). Setting to: {value}")
                         default[key] = value
                 else:
-                    info(f"Key '{key}' not found in original config. Adding with value: {value}", debug)
+                    if debug:
+                        info(f"Key '{key}' not found in original config. Adding with value: {value}")
                     default[key] = value
     return default
 
@@ -159,24 +166,31 @@ def load_config_metadata(config: Dict) -> Dict[str, Any]:
     metadata = {}
     # Graph file name
     metadata["graph_file"] = config["environment"]["graph_name"]
+    metadata["territory"] = config["environment"].get("assignment", None)
 
-    # Flag parameters
-    flag_config = config["extra_prameters"]["parameters"]["flag"]
-    metadata["flag_num"] = flag_config["number"]
-    metadata["flag_dist_type"] = flag_config["distribution"]["type"]
-    metadata["flag_param"] = flag_config["distribution"]["param"]
+    # Alpha flag parameters
+    alpha_flag_config = config["extra_parameters"]["parameters"]["alpha_flags"]
+    metadata["alpha_flag_num"] = alpha_flag_config["number"]
+    metadata["alpha_flag_dist_type"] = alpha_flag_config["distribution"]["type"]
+    metadata["alpha_flag_param"] = alpha_flag_config["distribution"]["param"]
 
-    # Attacker parameters
-    attacker_config = config["extra_prameters"]["parameters"]["attacker"]
-    metadata["attacker_num"] = attacker_config["number"]
-    metadata["attacker_dist_type"] = attacker_config["distribution"]["type"]
-    metadata["attacker_param"] = attacker_config["distribution"]["param"]
+    # Beta flag parameters
+    beta_flag_config = config["extra_parameters"]["parameters"]["beta_flags"]
+    metadata["beta_flag_num"] = beta_flag_config["number"]
+    metadata["beta_flag_dist_type"] = beta_flag_config["distribution"]["type"]
+    metadata["beta_flag_param"] = beta_flag_config["distribution"]["param"]
 
-    # Defender parameters
-    defender_config = config["extra_prameters"]["parameters"]["defender"]
-    metadata["defender_num"] = defender_config["number"]
-    metadata["defender_dist_type"] = defender_config["distribution"]["type"]
-    metadata["defender_param"] = defender_config["distribution"]["param"]
+    # Alpha team parameters
+    alpha_config = config["extra_parameters"]["parameters"]["alpha"]
+    metadata["alpha_num"] = alpha_config["number"]
+    metadata["alpha_dist_type"] = alpha_config["distribution"]["type"]
+    metadata["alpha_param"] = alpha_config["distribution"]["param"]
+
+    # Beta team parameters
+    beta_config = config["extra_parameters"]["parameters"]["beta"]
+    metadata["beta_num"] = beta_config["number"]
+    metadata["beta_dist_type"] = beta_config["distribution"]["type"]
+    metadata["beta_param"] = beta_config["distribution"]["param"]
 
     return metadata
 
@@ -185,42 +199,52 @@ def load_config_metadata(config: Dict) -> Dict[str, Any]:
 def generate_config_parameters(
     graph_file: str,
     game_rule: str,
-    flag_num: int,
-    flag_dist_type: str,
-    flag_param: Any,
-    center_node_flag: Any,
-    flag_positions: Any,
-    attacker_num: int,
-    attacker_dist_type: str,
-    attacker_param: Any,
-    center_node_attacker: Any,
-    attacker_positions: Any,
-    defender_num: int,
-    defender_dist_type: str,
-    defender_param: Any,
-    center_node_defender: Any,
-    defender_positions: Any,
+    alpha_flag_num: int,
+    alpha_flag_dist_type: str,
+    alpha_flag_param: Any,
+    center_node_alpha_flag: Any,
+    alpha_flag_positions: Any,
+    beta_flag_num: int,
+    beta_flag_dist_type: str,
+    beta_flag_param: Any,
+    center_node_beta_flag: Any,
+    beta_flag_positions: Any,
+    alpha_num: int,
+    alpha_dist_type: str,
+    alpha_param: Any,
+    center_node_alpha: Any,
+    alpha_positions: Any,
+    beta_num: int,
+    beta_dist_type: str,
+    beta_param: Any,
+    center_node_beta: Any,
+    beta_positions: Any,
 ) -> Tuple[Dict, str]:
-    # Build individual attacker and defender configurations
-    ATTACKER_CONFIG = {f"attacker_{i}": {"start_node_id": attacker_positions[i]} for i in range(len(attacker_positions))}
-    DEFENDER_CONFIG = {f"defender_{i}": {"start_node_id": defender_positions[i]} for i in range(len(defender_positions))}
+    # Build individual alpha and beta team configurations
+    ALPHA_CONFIG = {f"alpha_{i}": {"start_node_id": alpha_positions[i]} for i in range(len(alpha_positions))}
+    BETA_CONFIG = {f"beta_{i}": {"start_node_id": beta_positions[i]} for i in range(len(beta_positions))}
 
-    # Build the parameters information to be stored under extra_prameters
+    # Build the parameters information to be stored under extra_parameters
     parameters = {
-        "flag": {
-            "center_node": center_node_flag,
-            "number": flag_num,
-            "distribution": {"type": flag_dist_type, "param": flag_param},
+        "alpha_flags": {
+            "center_node": center_node_alpha_flag,
+            "number": alpha_flag_num,
+            "distribution": {"type": alpha_flag_dist_type, "param": alpha_flag_param},
         },
-        "attacker": {
-            "center_node": center_node_attacker,
-            "number": attacker_num,
-            "distribution": {"type": attacker_dist_type, "param": attacker_param},
+        "beta_flags": {
+            "center_node": center_node_beta_flag,
+            "number": beta_flag_num,
+            "distribution": {"type": beta_flag_dist_type, "param": beta_flag_param},
         },
-        "defender": {
-            "center_node": center_node_defender,
-            "number": defender_num,
-            "distribution": {"type": defender_dist_type, "param": defender_param},
+        "alpha": {
+            "center_node": center_node_alpha,
+            "number": alpha_num,
+            "distribution": {"type": alpha_dist_type, "param": alpha_param},
+        },
+        "beta": {
+            "center_node": center_node_beta,
+            "number": beta_num,
+            "distribution": {"type": beta_dist_type, "param": beta_param},
         },
     }
 
@@ -236,19 +260,20 @@ def generate_config_parameters(
         "game": {
             "rule": game_rule,
             # Note: Other game settings (max_time, interaction, payoff, etc.) will be filled by the default config.
-            "flag": {
-                "positions": flag_positions,
+            "flags": {
+                "alpha_positions": alpha_flag_positions,
+                "beta_positions": beta_flag_positions,
             },
         },
         "environment": {
             "graph_name": graph_file,
         },
         "agents": {
-            "attacker_config": ATTACKER_CONFIG,
-            "defender_config": DEFENDER_CONFIG,
+            "alpha_config": ALPHA_CONFIG,
+            "beta_config": BETA_CONFIG,
         },
-        # Store the original PARAMETERS info, the generated CONFIG_ID, and timestamp in extra_prameters
-        "extra_prameters": {
+        # Store the original PARAMETERS info, the generated CONFIG_ID, and timestamp in extra_parameters
+        "extra_parameters": {
             "parameters": parameters,
             "CONFIG_ID": hash_key,
             "timestamp": timestamp,
@@ -261,28 +286,33 @@ def generate_config_parameters(
 def generate_single_config(
     graph: nx.Graph,
     graph_file: str,
-    flag_num: int,
-    flag_dist_type: str,
-    flag_param: Any,
-    attacker_num: int,
-    defender_num: int,
-    attacker_dist_type: str,
-    attacker_param: Any,
-    defender_dist_type: str,
-    defender_param: Any,
+    alpha_flag_num: int,
+    alpha_flag_dist_type: str,
+    alpha_flag_param: Any,
+    beta_flag_num: int,
+    beta_flag_dist_type: str,
+    beta_flag_param: Any,
+    alpha_num: int,
+    beta_num: int,
+    alpha_dist_type: str,
+    alpha_param: Any,
+    beta_dist_type: str,
+    beta_param: Any,
     game_rule: str,
     output_dir: str,
     default_config_path: str,  # New parameter for the default config file
     debug: Optional[bool] = False,
-    center_node_flag: Optional[int] = None,
-    center_node_attacker: Optional[int] = None,
-    center_node_defender: Optional[int] = None,
-    custom_flag_positions: Optional[List[int]] = None,
-    custom_attacker_positions: Optional[List[int]] = None,
-    custom_defender_positions: Optional[List[int]] = None,
+    center_node_alpha_flag: Optional[int] = None,
+    center_node_beta_flag: Optional[int] = None,
+    center_node_alpha: Optional[int] = None,
+    center_node_beta: Optional[int] = None,
+    custom_alpha_flag_positions: Optional[List[int]] = None,
+    custom_beta_flag_positions: Optional[List[int]] = None,
+    custom_alpha_positions: Optional[List[int]] = None,
+    custom_beta_positions: Optional[List[int]] = None,
 ) -> Tuple[bool, str]:
     """
-    Generates a single configuration file based on the given parameters.
+    Generates a single configuration file based on the given parameters for symmetric alpha-beta team game.
     It loads a default configuration from 'default_config_path' and fills in missing keys.
 
     Parameters:
@@ -291,24 +321,30 @@ def generate_single_config(
         The graph object.
     graph_file : str
         The name of the graph file.
-    flag_num : int
-        Number of flags.
-    flag_dist_type : str
-        Distribution type for flag positions.
-    flag_param : Any
-        Parameter(s) for the flag distribution.
-    attacker_num : int
-        Number of attacker agents.
-    defender_num : int
-        Number of defender agents.
-    attacker_dist_type : str
-        Distribution type for attacker positions.
-    attacker_param : Any
-        Parameter(s) for the attacker distribution.
-    defender_dist_type : str
-        Distribution type for defender positions.
-    defender_param : Any
-        Parameter(s) for the defender distribution.
+    alpha_flag_num : int
+        Number of alpha team flags.
+    alpha_flag_dist_type : str
+        Distribution type for alpha flag positions.
+    alpha_flag_param : Any
+        Parameter(s) for the alpha flag distribution.
+    beta_flag_num : int
+        Number of beta team flags.
+    beta_flag_dist_type : str
+        Distribution type for beta flag positions.
+    beta_flag_param : Any
+        Parameter(s) for the beta flag distribution.
+    alpha_num : int
+        Number of alpha team agents.
+    beta_num : int
+        Number of beta team agents.
+    alpha_dist_type : str
+        Distribution type for alpha team positions.
+    alpha_param : Any
+        Parameter(s) for the alpha team distribution.
+    beta_dist_type : str
+        Distribution type for beta team positions.
+    beta_param : Any
+        Parameter(s) for the beta team distribution.
     game_rule : str
         The game rule to include in the configuration.
     output_dir : str
@@ -317,91 +353,119 @@ def generate_single_config(
         Path to the default configuration YAML file.
     debug : Optional[bool]
         If True, debug messages will be printed during the process.
-    center_node_flag : Optional[int]
-        The center node for flag positions. If None, a random node will be selected.
-    center_node_attacker : Optional[int]
-        The center node for attacker positions. If None, a random node will be selected.
-    center_node_defender : Optional[int]
-        The center node for defender positions. If None, a random node will be selected.
-    custom_flag_positions : Optional[List[int]]
-        Custom flag positions. If provided, this will override the generated positions.
-    custom_attacker_positions : Optional[List[int]]
-        Custom attacker positions. If provided, this will override the generated positions.
-    custom_defender_positions : Optional[List[int]]
-        Custom defender positions. If provided, this will override the generated positions.
+    center_node_alpha_flag : Optional[int]
+        The center node for alpha flag positions. If None, a random node will be selected.
+    center_node_beta_flag : Optional[int]
+        The center node for beta flag positions. If None, a random node will be selected.
+    center_node_alpha : Optional[int]
+        The center node for alpha team positions. If None, a random node will be selected.
+    center_node_beta : Optional[int]
+        The center node for beta team positions. If None, a random node will be selected.
+    custom_alpha_flag_positions : Optional[List[int]]
+        Custom alpha flag positions. If provided, this will override the generated positions.
+    custom_beta_flag_positions : Optional[List[int]]
+        Custom beta flag positions. If provided, this will override the generated positions.
+    custom_alpha_positions : Optional[List[int]]
+        Custom alpha team positions. If provided, this will override the generated positions.
+    custom_beta_positions : Optional[List[int]]
+        Custom beta team positions. If provided, this will override the generated positions.
 
     Returns:
     --------
     bool
         True if the configuration was generated successfully, False otherwise.
     """
-    # Generate positions for flag, attacker, and defender using provided functions.
-    # These functions should return positions and a center node.
-    if custom_flag_positions is None:
-        flag_positions, center_node_flag = generate_position_with_distribution(graph, flag_num, flag_dist_type, flag_param, center_node=center_node_flag)
-        if flag_positions is None:
-            error(f"Flag position generation failed for graph {graph_file} with parameters: flag_num={flag_num}, distribution={flag_dist_type}, param={flag_param}")
+    # Generate positions for alpha flags
+    if custom_alpha_flag_positions is None:
+        alpha_flag_positions, center_node_alpha_flag = generate_position_with_distribution(
+            graph, alpha_flag_num, alpha_flag_dist_type, alpha_flag_param, center_node=center_node_alpha_flag, debug=debug
+        )
+        if alpha_flag_positions is None:
+            error(f"Alpha flag position generation failed for graph {graph_file} with parameters: alpha_flag_num={alpha_flag_num}, distribution={alpha_flag_dist_type}, param={alpha_flag_param}")
             return False, ""
     else:
-        # Use custom flag positions if provided
-        flag_positions = custom_flag_positions
-        center_node_flag = None  # Indicate that positions were manually set
-        flag_num = len(flag_positions)  # Update flag_num based on custom positions
-        flag_dist_type = "handpicked"  
-        flag_param = None  # Indicate that no distribution was used
+        alpha_flag_positions = custom_alpha_flag_positions
+        center_node_alpha_flag = None
+        alpha_flag_num = len(alpha_flag_positions)
+        alpha_flag_dist_type = "handpicked"
+        alpha_flag_param = None
 
-    if custom_attacker_positions is None:
-        attacker_positions, center_node_attacker = generate_position_with_distribution(graph, attacker_num, attacker_dist_type, attacker_param, center_node=center_node_attacker)
-        if attacker_positions is None:
-            error(f"Attacker position generation failed for graph {graph_file} with parameters: attacker_num={attacker_num}, distribution={attacker_dist_type}, param={attacker_param}")
+    # Generate positions for beta flags
+    if custom_beta_flag_positions is None:
+        beta_flag_positions, center_node_beta_flag = generate_position_with_distribution(
+            graph, beta_flag_num, beta_flag_dist_type, beta_flag_param, center_node=center_node_beta_flag, debug=debug
+        )
+        if beta_flag_positions is None:
+            error(f"Beta flag position generation failed for graph {graph_file} with parameters: beta_flag_num={beta_flag_num}, distribution={beta_flag_dist_type}, param={beta_flag_param}")
             return False, ""
     else:
-        # Use custom attacker positions if provided
-        attacker_positions = custom_attacker_positions
-        center_node_attacker = None
-        attacker_num = len(attacker_positions)  # Update flag_num based on custom positions
-        attacker_dist_type = "handpicked"
-        attacker_param = None  # Indicate that no distribution was used
-    
-    if custom_defender_positions is None:
-        defender_positions, center_node_defender = generate_position_with_distribution(graph, defender_num, defender_dist_type, defender_param, center_node=center_node_defender)
-        if defender_positions is None:
-            error(f"Defender position generation failed for graph {graph_file} with parameters: defender_num={defender_num}, distribution={defender_dist_type}, param={defender_param}")
+        beta_flag_positions = custom_beta_flag_positions
+        center_node_beta_flag = None
+        beta_flag_num = len(beta_flag_positions)
+        beta_flag_dist_type = "handpicked"
+        beta_flag_param = None
+
+    # Generate positions for alpha team
+    if custom_alpha_positions is None:
+        alpha_positions, center_node_alpha = generate_position_with_distribution(
+            graph, alpha_num, alpha_dist_type, alpha_param, center_node=center_node_alpha, debug=debug
+        )
+        if alpha_positions is None:
+            error(f"Alpha team position generation failed for graph {graph_file} with parameters: alpha_num={alpha_num}, distribution={alpha_dist_type}, param={alpha_param}")
             return False, ""
     else:
-        # Use custom defender positions if provided
-        defender_positions = custom_defender_positions
-        center_node_defender = None
-        defender_num = len(defender_positions)  # Update flag_num based on custom positions
-        defender_dist_type = "handpicked"
-        defender_param = None  # Indicate that no distribution was used
+        alpha_positions = custom_alpha_positions
+        center_node_alpha = None
+        alpha_num = len(alpha_positions)
+        alpha_dist_type = "handpicked"
+        alpha_param = None
+
+    # Generate positions for beta team
+    if custom_beta_positions is None:
+        beta_positions, center_node_beta = generate_position_with_distribution(
+            graph, beta_num, beta_dist_type, beta_param, center_node=center_node_beta, debug=debug
+        )
+        if beta_positions is None:
+            error(f"Beta team position generation failed for graph {graph_file} with parameters: beta_num={beta_num}, distribution={beta_dist_type}, param={beta_param}")
+            return False, ""
+    else:
+        beta_positions = custom_beta_positions
+        center_node_beta = None
+        beta_num = len(beta_positions)
+        beta_dist_type = "handpicked"
+        beta_param = None
 
     # Build the generated configuration (partial) and compute CONFIG_ID
     generated_config, hash_key = generate_config_parameters(
         graph_file=graph_file,
         game_rule=game_rule,
-        flag_num=flag_num,
-        flag_dist_type=flag_dist_type,
-        flag_param=flag_param,
-        center_node_flag=center_node_flag,
-        flag_positions=flag_positions,
-        attacker_num=attacker_num,
-        attacker_dist_type=attacker_dist_type,
-        attacker_param=attacker_param,
-        center_node_attacker=center_node_attacker,
-        attacker_positions=attacker_positions,
-        defender_num=defender_num,
-        defender_dist_type=defender_dist_type,
-        defender_param=defender_param,
-        center_node_defender=center_node_defender,
-        defender_positions=defender_positions,
+        alpha_flag_num=alpha_flag_num,
+        alpha_flag_dist_type=alpha_flag_dist_type,
+        alpha_flag_param=alpha_flag_param,
+        center_node_alpha_flag=center_node_alpha_flag,
+        alpha_flag_positions=alpha_flag_positions,
+        beta_flag_num=beta_flag_num,
+        beta_flag_dist_type=beta_flag_dist_type,
+        beta_flag_param=beta_flag_param,
+        center_node_beta_flag=center_node_beta_flag,
+        beta_flag_positions=beta_flag_positions,
+        alpha_num=alpha_num,
+        alpha_dist_type=alpha_dist_type,
+        alpha_param=alpha_param,
+        center_node_alpha=center_node_alpha,
+        alpha_positions=alpha_positions,
+        beta_num=beta_num,
+        beta_dist_type=beta_dist_type,
+        beta_param=beta_param,
+        center_node_beta=center_node_beta,
+        beta_positions=beta_positions,
     )
 
     # Load the default configuration
     try:
-        default_config = read_yml_file(default_config_path, debug)
+        default_config = read_yml_file(default_config_path, debug=debug)
     except Exception as e:
-        error(e)
+        error(str(e))
         return False, ""
 
     # Merge the generated configuration into the default config (generated values override defaults)
@@ -412,50 +476,51 @@ def generate_single_config(
     if not write_yaml_config(merged_config, output_dir, filename):
         return False, filename
 
-    success(f"Generated configuration: {filename}", debug)
+    if debug:
+        success(f"Generated configuration: {filename}")
     return True, filename
 
 
 @typechecked
-def extract_positions_from_config(config: Dict[str, Any]) -> Tuple[List[int], List[int], List[int], Optional[str]]:
+def extract_positions_from_config(config: Dict[str, Any]) -> Tuple[List[int], List[int], List[int], List[int], Optional[str]]:
     """
-    Extract the attacker and defender start node IDs, flag positions, and graph name from a configuration dictionary.
+    Extract the alpha and beta team start node IDs, flag positions for both teams, and graph name from a configuration dictionary.
 
     Args:
         config (Dict[str, Any]): The configuration dictionary created by generate_config_parameters
 
     Returns:
-        Tuple[List[int], List[int], List[int], Optional[str]]: A tuple containing:
-            - List of attacker start node IDs
-            - List of defender start node IDs
-            - List of flag positions
+        Tuple[List[int], List[int], List[int], List[int], Optional[str]]: A tuple containing:
+            - List of alpha team start node IDs
+            - List of beta team start node IDs
+            - List of alpha flag positions
+            - List of beta flag positions
             - Graph name (or None if not found)
     """
-    # Extract attacker start node IDs
-    attacker_config = config.get("agents", {}).get("attacker_config", {})
-    attacker_positions = []
-    for i in range(len(attacker_config)):
-        # Try with both string and integer keys
-        key = f"attacker_{i}"
-        if key in attacker_config and "start_node_id" in attacker_config[key]:
-            attacker_positions.append(attacker_config[key]["start_node_id"])
+    # Extract alpha team start node IDs
+    alpha_config = config.get("agents", {}).get("alpha_config", {})
+    alpha_positions = []
+    for i in range(len(alpha_config)):
+        key = f"alpha_{i}"
+        if key in alpha_config and "start_node_id" in alpha_config[key]:
+            alpha_positions.append(alpha_config[key]["start_node_id"])
 
-    # Extract defender start node IDs
-    defender_config = config.get("agents", {}).get("defender_config", {})
-    defender_positions = []
-    for i in range(len(defender_config)):
-        # Try with both string and integer keys
-        key = f"defender_{i}"
-        if key in defender_config and "start_node_id" in defender_config[key]:
-            defender_positions.append(defender_config[key]["start_node_id"])
+    # Extract beta team start node IDs
+    beta_config = config.get("agents", {}).get("beta_config", {})
+    beta_positions = []
+    for i in range(len(beta_config)):
+        key = f"beta_{i}"
+        if key in beta_config and "start_node_id" in beta_config[key]:
+            beta_positions.append(beta_config[key]["start_node_id"])
 
-    # Extract flag positions
-    flag_positions = config.get("game", {}).get("flag", {}).get("positions", [])
+    # Extract flag positions for both teams
+    alpha_flag_positions = config.get("game", {}).get("flags", {}).get("alpha_positions", [])
+    beta_flag_positions = config.get("game", {}).get("flags", {}).get("beta_positions", [])
 
     # Extract graph name
     graph_name = config.get("environment", {}).get("graph_name")
 
-    return attacker_positions, defender_positions, flag_positions, graph_name
+    return alpha_positions, beta_positions, alpha_flag_positions, beta_flag_positions, graph_name
 
 
 @typechecked
@@ -468,7 +533,7 @@ def apply_game_rule_overrides(config: Dict, game_rule_path: str, debug: Optional
     game_rule_name = config["game"]["rule"]
     game_rule_file = os.path.join(game_rule_path, f"{game_rule_name}.yml")
     try:
-        gr = read_yml_file(game_rule_file, debug).pop("gamerule", {})
+        gr = read_yml_file(game_rule_file, debug=debug).pop("gamerule", {})
     except Exception as e:
         error(f"Error reading game rule file {game_rule_file}: {e}")
         return config
@@ -481,63 +546,85 @@ def apply_game_rule_overrides(config: Dict, game_rule_path: str, debug: Optional
         if key != "agents":
             if key in config and isinstance(config[key], dict) and isinstance(value, dict):
                 # Use force=True to override all keys.
-                config[key] = recursive_update(config[key], value, force=True)
+                config[key] = recursive_update(config[key], value, force=True, debug=debug)
             else:
                 if key in config:
-                    warning(f"Overriding key '{key}': {config[key]} -> {value}", debug)
+                    if debug:
+                        warning(f"Overriding key '{key}': {config[key]} -> {value}")
                 else:
-                    info(f"Key '{key}' not found in original config. Adding with value: {value}", debug)
+                    if debug:
+                        info(f"Key '{key}' not found in original config. Adding with value: {value}")
                 config[key] = value
 
     # --- Override the agents section ---
     if "agents" in gr:
         agents_overrides = gr["agents"]
 
-        # Process attacker overrides.
-        if "attacker_global" in agents_overrides:
-            attacker_override = agents_overrides["attacker_global"]
+        # Process alpha team overrides.
+        if "alpha_global" in agents_overrides:
+            alpha_override = agents_overrides["alpha_global"]
             if "agents" in config:
-                # Override global attacker settings.
-                if "attacker_global" in config["agents"]:
-                    old_value = config["agents"]["attacker_global"]
-                    new_value = attacker_override.copy()
+                # Override global alpha settings.
+                if "alpha_global" in config["agents"]:
+                    old_value = config["agents"]["alpha_global"]
+                    new_value = alpha_override.copy()
                     if old_value != new_value:
-                        warning(f"Overriding agents.attacker_global: {old_value} -> {new_value}", debug)
-                        config["agents"]["attacker_global"] = new_value
-                # Override each individual attacker.
-                if "attacker_config" in config["agents"]:
-                    for key, a_conf in config["agents"]["attacker_config"].items():
+                        if debug:
+                            warning(f"Overriding agents.alpha_global: {old_value} -> {new_value}")
+                        config["agents"]["alpha_global"] = new_value
+                # Override each individual alpha agent.
+                if "alpha_config" in config["agents"]:
+                    for key, a_conf in config["agents"]["alpha_config"].items():
                         old_value = a_conf.copy()
                         start_node = a_conf.get("start_node_id")
-                        new_conf = attacker_override.copy()
+                        # Preserve any existing radii settings
+                        capture_radius = a_conf.get("capture_radius")
+                        tagging_radius = a_conf.get("tagging_radius")
+                        
+                        new_conf = alpha_override.copy()
                         if start_node is not None:
                             new_conf["start_node_id"] = start_node
+                        if capture_radius is not None:
+                            new_conf["capture_radius"] = capture_radius
+                        if tagging_radius is not None:
+                            new_conf["tagging_radius"] = tagging_radius
                         if old_value != new_conf:
-                            warning(f"Overriding agents.attacker_config.{key}: {old_value} -> {new_conf}", debug)
-                            config["agents"]["attacker_config"][key] = new_conf
+                            if debug:
+                                warning(f"Overriding agents.alpha_config.{key}: {old_value} -> {new_conf}")
+                            config["agents"]["alpha_config"][key] = new_conf
 
-        # Process defender overrides.
-        if "defender_global" in agents_overrides:
-            defender_override = agents_overrides["defender_global"]
+        # Process beta team overrides.
+        if "beta_global" in agents_overrides:
+            beta_override = agents_overrides["beta_global"]
             if "agents" in config:
-                # Override global defender settings.
-                if "defender_global" in config["agents"]:
-                    old_value = config["agents"]["defender_global"]
-                    new_value = defender_override.copy()
+                # Override global beta settings.
+                if "beta_global" in config["agents"]:
+                    old_value = config["agents"]["beta_global"]
+                    new_value = beta_override.copy()
                     if old_value != new_value:
-                        warning(f"Overriding agents.defender_global: {old_value} -> {new_value}", debug)
-                        config["agents"]["defender_global"] = new_value
-                # Override each individual defender.
-                if "defender_config" in config["agents"]:
-                    for key, d_conf in config["agents"]["defender_config"].items():
+                        if debug:
+                            warning(f"Overriding agents.beta_global: {old_value} -> {new_value}")
+                        config["agents"]["beta_global"] = new_value
+                # Override each individual beta agent.
+                if "beta_config" in config["agents"]:
+                    for key, d_conf in config["agents"]["beta_config"].items():
                         old_value = d_conf.copy()
                         start_node = d_conf.get("start_node_id")
-                        new_conf = defender_override.copy()
+                        # Preserve any existing radii settings
+                        capture_radius = d_conf.get("capture_radius")
+                        tagging_radius = d_conf.get("tagging_radius")
+                        
+                        new_conf = beta_override.copy()
                         if start_node is not None:
                             new_conf["start_node_id"] = start_node
+                        if capture_radius is not None:
+                            new_conf["capture_radius"] = capture_radius
+                        if tagging_radius is not None:
+                            new_conf["tagging_radius"] = tagging_radius
                         if old_value != new_conf:
-                            warning(f"Overriding agents.defender_config.{key}: {old_value} -> {new_conf}", debug)
-                            config["agents"]["defender_config"][key] = new_conf
+                            if debug:
+                                warning(f"Overriding agents.beta_config.{key}: {old_value} -> {new_conf}")
+                            config["agents"]["beta_config"][key] = new_conf
     return config
 
 
@@ -560,7 +647,8 @@ def load_configuration(config_name: str, dirs: dict, debug: bool = False) -> dic
         config_dir=dirs["config"],
         debug=debug,
     )
-    success("Read original config file successfully", debug)
+    if debug:
+        success("Read original config file successfully")
 
     # Apply overrides from your rules directory
     config = apply_game_rule_overrides(
@@ -568,7 +656,8 @@ def load_configuration(config_name: str, dirs: dict, debug: bool = False) -> dic
         dirs["rules"],
         debug=debug,
     )
-    success("Applied game rule overrides", debug)
+    if debug:
+        success("Applied game rule overrides")
 
     return config
 
@@ -586,10 +675,19 @@ def create_context_with_sensors(config: dict, G: nx.MultiDiGraph, visualization:
             VIS_ENGINE = gamms.visual.Engine.PYGAME
         else:
             VIS_ENGINE = gamms.visual.Engine.NO_VIS
-    # success(f"Visualization Engine: {VIS_ENGINE}", debug)
+    # if debug:
+    #     success(f"Visualization Engine: {VIS_ENGINE}")
 
-    # Create a new context
-    ctx = gamms.create_context(vis_engine=VIS_ENGINE)
+    # Extract window size from config
+    vis_config = config.get("visualization", {})
+    window_size = vis_config.get("window_size", [1280, 720])
+
+    # Create a new context with window size
+    vis_kwargs = {
+        "width": window_size[0] if isinstance(window_size, list) and len(window_size) > 0 else 1280,
+        "height": window_size[1] if isinstance(window_size, list) and len(window_size) > 1 else 720,
+    }
+    ctx = gamms.create_context(vis_engine=VIS_ENGINE, vis_kwargs=vis_kwargs)
     ctx.graph.attach_networkx_graph(G)
 
     # Create sensors using static definitions with their configuration

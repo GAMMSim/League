@@ -1,16 +1,18 @@
 import networkx as nx
 from typing import Optional, Dict, List, Any, Union
+from typeguard import typechecked
 
 try:
-    from ..core.core import *
+    from ..core.console import *
 except ModuleNotFoundError:
-    from lib.core.core import *
+    from lib.core.console import *
 
 
 @typechecked
 class AgentGraph:
     """
     A class representing an agent graph with flag and agent positions.
+    Updated for alpha/beta team system.
     """
 
     def __init__(self, graph: Optional[nx.MultiDiGraph] = None):
@@ -21,9 +23,12 @@ class AgentGraph:
             graph (Optional[nx.MultiDiGraph]): A NetworkX graph object representing the agent graph.
         """
         self.graph = graph  # The NetworkX graph object
+        self.agent_dict = {}
+        self.alpha_dict = {}
+        self.beta_dict = {}
+        # Keep old names for backward compatibility
         self.attacker_dict = {}
         self.defender_dict = {}
-        self.agent_dict = {}
         self.flag_positions = []
         self.flag_weights = []
 
@@ -148,6 +153,7 @@ class AgentGraph:
     def set_agent_dict(self, agent_info: Dict[str, Any]) -> None:
         """
         Set the agent positions from the given information.
+        Updated for alpha/beta team system.
 
         Parameters:
             agent_info (Dict[str, Any]): Dictionary mapping agent names to their positions.
@@ -156,10 +162,15 @@ class AgentGraph:
             None
         """
         self.agent_dict = {name: info for name, info in agent_info.items()}
-        # Get the attacker positions
-        self.attacker_dict = {name: info for name, info in agent_info.items() if "attacker" in name}
-        # Get the defender positions
-        self.defender_dict = {name: info for name, info in agent_info.items() if "defender" in name}
+        
+        # Update team dictionaries for alpha/beta system
+        self.alpha_dict = {name: info for name, info in agent_info.items() if "alpha" in name}
+        self.beta_dict = {name: info for name, info in agent_info.items() if "beta" in name}
+        
+        # Keep old attacker/defender dicts for backward compatibility
+        # You can switch these assignments based on which team is attacking/defending
+        self.attacker_dict = self.alpha_dict  # Can be switched based on game context
+        self.defender_dict = self.beta_dict
 
     def set_flag_positions(self, flag_positions: List[Any]) -> None:
         """
@@ -185,28 +196,57 @@ class AgentGraph:
         """
         self.flag_weights = flag_weights
 
-    def get_team_positions(self, team: str) -> List[Any]:
+    def get_team_positions(self, team: str) -> List[tuple]:
         """
         Retrieve the positions of agents belonging to a specified team.
+        Updated to return (name, position) tuples as expected by strategy.
 
         Parameters:
-            team (str): The team identifier (should be part of the agent's name).
+            team (str): The team identifier ("alpha", "beta", "attacker", or "defender").
 
         Returns:
-            List[Any]: List of positions for agents that belong to the team.
+            List[tuple]: List of (agent_name, position) tuples for agents that belong to the team.
         """
-        if not self.agent_dict:  # Fixed bug: was using self.agent_positions
+        if not self.agent_dict:
             return []
-        return [pos for name, pos in self.agent_dict.items() if team in name]
+        
+        # Handle both new (alpha/beta) and old (attacker/defender) team names
+        if team == "alpha":
+            return [(name, pos) for name, pos in self.alpha_dict.items()]
+        elif team == "beta":
+            return [(name, pos) for name, pos in self.beta_dict.items()]
+        elif team == "attacker":
+            return [(name, pos) for name, pos in self.attacker_dict.items()]
+        elif team == "defender":
+            return [(name, pos) for name, pos in self.defender_dict.items()]
+        else:
+            # Fallback: search by team name in agent name
+            return [(name, pos) for name, pos in self.agent_dict.items() if team in name]
+
+    def set_team_positions(self, team: str, team_dict: Dict[str, Any]) -> None:
+        """
+        Set positions for a specific team.
+        
+        Parameters:
+            team (str): Team identifier ("alpha" or "beta").
+            team_dict (Dict[str, Any]): Dictionary mapping agent names to positions.
+        """
+        if team == "alpha":
+            self.alpha_dict = team_dict
+            self.attacker_dict = team_dict  # Update backward compatibility
+        elif team == "beta":
+            self.beta_dict = team_dict
+            self.defender_dict = team_dict  # Update backward compatibility
 
     def get_agent_dicts(self) -> tuple:
         """
         Retrieve the positions of all agents.
+        Updated for alpha/beta system.
 
         Returns:
-            tuple: A tuple containing (agent_dict, attacker_dict, defender_dict)
+            tuple: A tuple containing (agent_dict, alpha_dict, beta_dict)
         """
-        return self.agent_dict, self.attacker_dict, self.defender_dict
+        return self.agent_dict, self.alpha_dict, self.beta_dict
 
     def get_flag_positions(self) -> List[Any]:
         """
@@ -246,8 +286,9 @@ class AgentGraph:
         info_str = "AgentGraph\n"
         info_str += f"Nodes: {len(self.graph.nodes)}\n"
         info_str += f"Edges: {len(self.graph.edges)}\n"
-        info_str += f"Attackers: {len(self.attacker_dict)}\n"
-        info_str += f"Defenders: {len(self.defender_dict)}\n"
+        info_str += f"Alpha agents: {len(self.alpha_dict)}\n"
+        info_str += f"Beta agents: {len(self.beta_dict)}\n"
+        info_str += f"Total agents: {len(self.agent_dict)}\n"
         info_str += f"Flags: {len(self.flag_positions)}\n"
         return info_str
 
@@ -259,14 +300,12 @@ if __name__ == "__main__":
 
     sample_edges = {"edge1": {"source": "A", "target": "B", "weight": 1.0}, "edge2": {"source": "B", "target": "C", "weight": 2.0}, "edge3": {"source": "C", "target": "A", "weight": 3.0}}
 
-    # This is a deliberate bug in the main block as requested
-    # The bug is using the wrong variable name for creating the graph
     try:
         ag = AgentGraph()
-        ag.attach_networkx_graph(sample_nodes, sample_edges)  # Bug: 'nodes' is undefined, should be 'sample_nodes'
+        ag.attach_networkx_graph(sample_nodes, sample_edges)
 
-        # Set some agents
-        agents = {"attacker1": {"position": "A"}, "attacker2": {"position": "B"}, "defender1": {"position": "C"}}
+        # Set some agents with alpha/beta naming
+        agents = {"alpha_0": "A", "alpha_1": "B", "beta_0": "C", "beta_1": "A"}
         ag.set_agent_dict(agents)
 
         # Set flags
@@ -274,7 +313,10 @@ if __name__ == "__main__":
         ag.set_flag_weights([1.0, 2.0])
 
         print(ag)
+        
+        # Test team position retrieval
+        print(f"Alpha team: {ag.get_team_positions('alpha')}")
+        print(f"Beta team: {ag.get_team_positions('beta')}")
 
-    except NameError as e:
+    except Exception as e:
         print(f"Error in demo: {e}")
-        print("This error is intentional to demonstrate error handling.")

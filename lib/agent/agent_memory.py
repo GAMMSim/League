@@ -1,26 +1,28 @@
 from typeguard import typechecked
 try:
     from ..agent.agent_graph import AgentGraph
-    from ..core.core import *
+    from ..core.console import *
 except ModuleNotFoundError:
     from lib.agent.agent_graph import AgentGraph
-    from lib.core.core import *
+    from lib.core.console import *
 
 @typechecked
 class AgentMemory:
-    def __init__(self, speed: float, capture_radius: float, map: AgentGraph, start_node_id: int, **kwargs: Any) -> None:
+    def __init__(self, speed: float, capture_radius: float, map: AgentGraph, start_node_id: int, tagging_radius: float = 0.0, **kwargs: Any) -> None:
         """
         Initialize the AgentMemory with required properties and additional custom parameters.
 
         Args:
             speed (float): The agent's speed.
-            capture_radius (float): The agent's capture radius.
+            capture_radius (float): The agent's capture radius for flag interactions.
             map (AgentGraph): The map (AgentGraph) the agent is operating on.
             start_node_id (int): The starting node identifier for the agent.
+            tagging_radius (float): The agent's tagging radius for combat interactions. Defaults to 0.0.
             **kwargs: Additional custom parameters.
         """
         self.speed = speed
         self.capture_radius = capture_radius
+        self.tagging_radius = tagging_radius
         self.map = map
         self.start_node_id = start_node_id
 

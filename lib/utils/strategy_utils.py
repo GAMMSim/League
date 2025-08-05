@@ -3,10 +3,10 @@ from typeguard import typechecked
 
 
 try:
-    from lib.core.core import *
+    from lib.core.console import *
     import lib.visual.graph_visualizer as gfvis
 except ModuleNotFoundError:
-    from ..core.core import *
+    from ..core.console import *
     from visual import graph_visualizer as gfvis
 
 
@@ -104,171 +104,10 @@ def compute_attraction_distances(G: nx.Graph, A: Optional[Set[Any]] = None, meth
     else:
         error(f"Unknown method: {method}. Use 'min' or 'sum'.")
         raise ValueError(f"Unknown method: {method}. Use 'min' or 'sum'.")
-    success(f"Computed attraction distances using {method} method.", debug)
+    
+    if debug:
+        success(f"Computed attraction distances using {method} method.")
     return attraction_distances_dict
-
-
-@typechecked
-def _V1R11_patch_boundary_for_connectivity(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: Optional[int] = None, debug: bool = False) -> Set[Any]:
-    """
-    (Legacy) Ensure that the boundary set P is connected by patching in additional nodes from H.
-
-    The function checks the induced subgraph of P for connectivity. If it is disconnected,
-    it searches for a shortest path between components in the subgraph of H, using an edge weight
-    function that penalizes stepping outside the current boundary P. Nodes along the shortest path
-    are then added to P to connect the disconnected components.
-
-    Parameters:
-        G (nx.Graph): The full graph.
-        P (Set[Any]): The initial set of boundary nodes.
-        H (Set[Any]): The superset of nodes representing the current hull.
-        penalty (Optional[int]): The extra cost for stepping outside P. Defaults to the number of nodes in G.
-        debug (bool): If True, debug messages are printed.
-
-    Returns:
-        Set[Any]: The updated set of boundary nodes, patched to form a connected subgraph.
-    """
-    warning("You are using the legacy version of patch_boundary_for_connectivity.", debug)
-    if penalty is None:
-        penalty = G.number_of_nodes()  # Default penalty
-
-    P_new = set(P)
-
-    def edge_weight(a: Any, b: Any, d: Any) -> int:
-        # Lower cost if both nodes are already in P_new.
-        return 1 if (a in P_new and b in P_new) else 1 + penalty
-
-    while True:
-        subP = G.subgraph(P_new)
-        components = list(nx.connected_components(subP))
-        if len(components) <= 1:
-            break  # Already connected
-
-        best_path = None
-        best_cost = float("inf")
-        found_patch = False
-
-        # Iterate over pairs of disconnected components.
-        for i in range(len(components)):
-            if found_patch:
-                break
-            for j in range(i + 1, len(components)):
-                if found_patch:
-                    break
-                comp1 = components[i]
-                comp2 = components[j]
-                for u in comp1:
-                    if found_patch:
-                        break
-                    for v in comp2:
-                        try:
-                            cost = nx.dijkstra_path_length(G.subgraph(H), u, v, weight=edge_weight)
-                            if cost < best_cost:
-                                best_cost = cost
-                                best_path = nx.dijkstra_path(G.subgraph(H), u, v, weight=edge_weight)
-                                found_patch = True
-                                break
-                        except nx.NetworkXNoPath:
-                            continue
-                    if found_patch:
-                        break
-                if found_patch:
-                    break
-
-        if not found_patch:
-            info("Unable to patch any further disconnected components in H.", debug)
-            break
-
-        # Add nodes along the best path to P_new.
-        for node in best_path:
-            if node not in P_new:
-                P_new.add(node)
-                info(f"Added node {node} to boundary from path connecting components.", debug)
-        continue
-
-    return P_new
-
-
-@typechecked
-def _V1R12_patch_boundary_for_connectivity(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: Optional[int] = None, debug: bool = False) -> Set[Any]:
-    """
-    Ensure that the boundary set P is connected by patching in additional nodes from H.
-
-    The function checks the induced subgraph of P for connectivity.
-    If it is disconnected, it searches for a shortest path between components in the subgraph of H,
-    using an edge weight function that penalizes stepping outside the current boundary P. Once a path is
-    found connecting any two disconnected components, the nodes along that path are added to P.
-    This process repeats until the boundary becomes connected.
-
-    Parameters:
-        G (nx.Graph): The full undirected graph.
-        P (Set[Any]): The initial set of boundary nodes.
-        H (Set[Any]): The superset of nodes representing the current hull.
-        penalty (Optional[int]): The extra cost for stepping outside P. Defaults to the number of nodes in G.
-        debug (bool): If True, debug messages are printed.
-
-    Returns:
-        Set[Any]: The updated set of boundary nodes, patched to form a connected subgraph.
-    """
-    if penalty is None:
-        penalty = G.number_of_nodes()  # Default penalty
-
-    P_new = set(P)
-
-    # DIFFERENT: Define edge weight function once, outside the loop
-    def edge_weight(a: Any, b: Any, d: Any) -> int:
-        # Lower cost if both nodes are already in P_new
-        return 1 if (a in P_new and b in P_new) else 1 + penalty
-
-    while True:
-        subP = G.subgraph(P_new)
-        components = list(nx.connected_components(subP))
-        if nx.is_connected(subP) and all(subP.degree(n) == 2 for n in subP.nodes()):
-            info("Boundary is already connected.", debug)
-            break  # The boundary forms a cycle.
-
-        found_path = None
-        found_patch = False
-
-        for i in range(len(components)):
-            if found_patch:
-                break
-            for j in range(i + 1, len(components)):
-                if found_patch:
-                    break
-                comp1 = components[i]
-                comp2 = components[j]
-
-                H_subgraph = G.subgraph(H)
-
-                for u in comp1:
-                    if found_patch:
-                        break
-                    for v in comp2:
-                        try:
-                            # DIFFERENT: More efficient path computation by checking length first
-                            cost = nx.dijkstra_path_length(H_subgraph, u, v, weight=edge_weight)
-                            found_path = nx.dijkstra_path(H_subgraph, u, v, weight=edge_weight)
-                            found_patch = True
-                            break
-                        except nx.NetworkXNoPath:
-                            continue
-                    if found_patch:
-                        break
-                if found_patch:
-                    break
-
-        if not found_patch:
-            info("Unable to patch any further disconnected components in H.", debug)
-            break
-
-        # Add nodes along the best path to P_new.
-        for node in found_path:
-            if node not in P_new:
-                P_new.add(node)
-                info(f"Added node {node} to boundary from path connecting components.", debug)
-
-    return P_new
 
 
 @typechecked
@@ -306,16 +145,14 @@ def patch_boundary_for_connectivity(G: nx.Graph, P: Set[Any], H: Set[Any], attra
 
     # Step 2: If P is still disconnected, patch using nodes from outside H with penalty
     if not nx.is_connected(G.subgraph(P_new)):
-        info("Could not fully connect boundary using only nodes from H. Trying external nodes.", debug)
+        if debug:
+            info("Could not fully connect boundary using only nodes from H. Trying external nodes.")
         P_new = patch_with_external(G, P_new, H, penalty, debug)
         H.update(P_new)
 
     # Here P should already be connected, if not, raise a warning
     if not nx.is_connected(G.subgraph(P_new)):
         warning("Boundary is still disconnected after patching with external nodes.")
-
-    # P_new = ensure_boundary_min_degree(G, P_new, H, debug)
-    # H.update(P_new)
 
     return P_new
 
@@ -343,7 +180,8 @@ def patch_with_hull(G: nx.Graph, P: Set[Any], H: Set[Any], debug: bool) -> Set[A
 
         # If P is connected, we're done with this step
         if nx.is_connected(subP):
-            info("Boundary is now connected using nodes from H.", debug)
+            if debug:
+                info("Boundary is now connected using nodes from H.")
             break
 
         # Get the connected components
@@ -389,14 +227,16 @@ def patch_with_hull(G: nx.Graph, P: Set[Any], H: Set[Any], debug: bool) -> Set[A
 
         # If no path was found between any components, break
         if best_path is None:
-            info("Unable to patch any further disconnected components using nodes from H.", debug)
+            if debug:
+                info("Unable to patch any further disconnected components using nodes from H.")
             break
 
         # Add nodes along the best path to P_new
         for node in best_path:
             if node not in P_new:
                 P_new.add(node)
-                info(f"Added node {node} from H to boundary when connecting node {best_pair[0]} to {best_pair[1]}.", debug)
+                if debug:
+                    info(f"Added node {node} from H to boundary when connecting node {best_pair[0]} to {best_pair[1]}.")
 
     return P_new
 
@@ -418,15 +258,14 @@ def patch_with_external(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: int, deb
     """
     P_new = set(P)
     attraction_distances = getattr(G, "A_distances", {})
-    print(attraction_distances)
-    print("!!!!!!!!!!!!!")
 
     while True:
         # Check connectivity of current boundary
         subP = G.subgraph(P_new)
 
         if nx.is_connected(subP):
-            info("Boundary is already connected without external nodes.", debug)
+            if debug:
+                info("Boundary is already connected without external nodes.")
             break
 
         # Get the connected components
@@ -443,7 +282,8 @@ def patch_with_external(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: int, deb
                     a_value = attraction_distances.get(a, 0)
                     b_value = attraction_distances.get(b, 0)
                     adjustment = (a_value + b_value) / 2
-                    print(f"Attraction distances: {a_value}, {b_value}, adjustment: {adjustment}")
+                    if debug:
+                        info(f"Attraction distances: {a_value}, {b_value}, adjustment: {adjustment}")
                     return penalty + 1 + adjustment * 0.5
                 else:
                     return penalty + 1
@@ -470,7 +310,8 @@ def patch_with_external(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: int, deb
 
         # If no path was found between any components, break
         if found_path is None:
-            info("Unable to patch any further disconnected components even with external nodes.", debug)
+            if debug:
+                info("Unable to patch any further disconnected components even with external nodes.")
             break
 
         # Add nodes along the found path to P_new
@@ -479,196 +320,11 @@ def patch_with_external(G: nx.Graph, P: Set[Any], H: Set[Any], penalty: int, deb
                 P_new.add(node)
                 # Check if the node is in H or outside
                 if node not in H:
-                    info(f"Added external node {node} to boundary.", debug)
+                    if debug:
+                        info(f"Added external node {node} to boundary.")
                 else:
                     warning(f"Added node {node} to boundary from H inside patch with external. Potentially algorithm flaw.")
     return P_new
-
-
-@typechecked
-def _V1R11_compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = False, debug: bool = False) -> Set[Any]:
-    """
-    (Legacy) Compute the convex hull of a set S on graph G based on graph distances.
-
-    Starting with the initial set S, the convex hull H is iteratively expanded.
-    For every pair of boundary nodes, if there is a shorter path outside the current boundary,
-    the nodes along that path are added to H. Optionally, the steps of the computation can be visualized.
-
-    Parameters:
-        G (nx.Graph): The input graph.
-        S (Set[Any]): The initial set of nodes (seed points).
-        visualize_steps (bool): If True, intermediate steps of the hull computation are visualized.
-        debug (bool): If True, prints debug messages.
-
-    Returns:
-        Set[Any]: The computed convex hull as a set of nodes.
-    """
-    warning("You are using the legacy version of compute_graph_convex_hull.", debug)
-    H: Set[Any] = set(S)
-
-    if visualize_steps:
-        try:
-            initial_P = {u for u in H if any(v not in H for v in G.neighbors(u))}
-            gv = gfvis.GraphVisualizer(G=G, mode="static", extra_info={"Step": "Initial convex hull"}, node_size=300)
-            gv.color_nodes(list(S), color="green", mode="solid", name="Seed")
-            gv.color_nodes(list(H), color="green", mode="transparent", name="Hull")
-            gv.color_nodes(list(initial_P), color="orange", mode="transparent", name="Boundary")
-            gv.visualize()
-        except Exception as e:
-            warning(f"Error visualizing initial state: {e}")
-
-    while True:
-        P = {u for u in H if any(v not in H for v in G.neighbors(u))}
-        P_subgraph = G.subgraph(P)
-        changed = False
-        P_list = list(P)
-
-        for i in range(len(P_list)):
-            for j in range(i + 1, len(P_list)):
-                u, v = P_list[i], P_list[j]
-                try:
-                    boundary_distance = nx.shortest_path_length(P_subgraph, u, v)
-                except nx.NetworkXNoPath:
-                    inside_path_penalty = G.number_of_nodes()
-
-                    def edge_weight(a: Any, b: Any, d: Any) -> int:
-                        return 1 if (a in P and b in P) else 1 + inside_path_penalty
-
-                    try:
-                        dpath = nx.dijkstra_path(G.subgraph(H), u, v, weight=edge_weight)
-                        boundary_distance = len(dpath) - 1
-                        for node in dpath:
-                            if node not in P:
-                                P.add(node)
-                                info(f"Added node {node} to boundary from path connecting {u} and {v}", debug)
-                    except nx.NetworkXNoPath:
-                        boundary_distance = float("inf")
-
-                # Check for a shortcut outside H.
-                outside_nodes = (set(G.nodes()) - H) | P
-                outside_nodes.update({u, v})
-                outside_graph = G.subgraph(outside_nodes)
-
-                try:
-                    outside_distance = nx.shortest_path_length(outside_graph, u, v)
-                    if outside_distance < boundary_distance:
-                        info(f"Shortcut found between {u} and {v} outside the current hull.", debug)
-                        outside_path = nx.shortest_path(outside_graph, u, v)
-                        H.update(outside_path)
-
-                        if visualize_steps:
-                            try:
-                                P = {u for u in H if any(v not in H for v in G.neighbors(u))}
-                                P_subgraph = G.subgraph(P)
-                                P_list = list(P)
-                                gv = gfvis.GraphVisualizer(G=G, mode="static", extra_info={"Step": f"Updated hull with shortcut between {u} and {v}"}, node_size=300)
-                                gv.color_nodes(list(S), color="green", mode="solid", name="Seed")
-                                gv.color_nodes(list(H), color="green", mode="transparent", name="Hull")
-                                gv.color_nodes(list(P), color="orange", mode="transparent", name="Boundary")
-                                gv.visualize()
-                            except Exception as e:
-                                warning(f"Error visualizing updated state: {e}")
-
-                        changed = True
-                        break
-                except nx.NetworkXNoPath:
-                    pass
-            if changed:
-                break
-        if not changed:
-            break
-    success("Convex hull computation completed.", debug)
-    return H
-
-
-@typechecked
-def _V1R12_compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = False, debug: bool = False) -> Set[Any]:
-    """
-    Compute the convex hull of a set S on graph G based on graph distances.
-
-    Starting with the initial set S, the convex hull H is iteratively expanded.
-    For every pair of boundary nodes, if there is a shorter path outside the current boundary,
-    the nodes along that path are added to H. Optionally, the steps of the computation can be visualized.
-
-    Parameters:
-        G (nx.Graph): The input graph.
-        S (Set[Any]): The initial set of nodes (seed points).
-        visualize_steps (bool): If True, intermediate steps of the hull computation are visualized.
-        debug (bool): If True, prints debug messages.
-
-    Returns:
-        Set[Any]: The computed convex hull as a set of nodes.
-    """
-    H: Set[Any] = set(S)
-
-    while True:
-        info(f"Current hull at start of it: {H}", debug)
-        P = {u for u in H if any(v not in H for v in G.neighbors(u))}
-        P = patch_boundary_for_connectivity(G, P, H, debug=debug)
-        info(f"Boundary nodes: {P}", debug)
-        # Create a subgraph of the boundary nodes
-        changed = False
-        P_list = list(P)
-        if visualize_steps:
-            try:
-                viz_G = nx.MultiDiGraph(G) if G is not None else None
-                gv = gfvis.GraphVisualizer(G=viz_G, mode="static", node_size=300)
-                gv.color_nodes(list(S), color="green", mode="solid", name="Seed")
-                gv.color_nodes(list(H), color="green", mode="transparent", name="Hull")
-                gv.color_nodes(list(P), color="orange", mode="transparent", name="Boundary")
-                gv.visualize()
-            except Exception as e:
-                warning(f"Error visualizing initial state: {e}")
-
-        # Create pairs of all boundary nodes
-        boundary_pairs = []
-        for i in range(len(P_list)):
-            for j in range(i + 1, len(P_list)):
-                boundary_pairs.append((P_list[i], P_list[j]))
-
-        for u, v in boundary_pairs:
-            try:
-                boundary_distance = nx.shortest_path_length(G.subgraph(P), u, v)
-            except nx.NetworkXNoPath:
-                inside_path_penalty = G.number_of_nodes()
-
-                def edge_weight(a: Any, b: Any, d: Any) -> int:
-                    return 1 if (a in P and b in P) else 1 + inside_path_penalty
-
-                try:
-                    weighted_shortest_path = nx.dijkstra_path(G.subgraph(H), u, v, weight=edge_weight)
-                    boundary_distance = len(weighted_shortest_path) - 1
-                    for node in weighted_shortest_path:
-                        if node not in P:
-                            P.add(node)
-                            H.add(node)
-                            info(f"Added node {node} to boundary from path connecting {u} and {v}", debug)
-                except nx.NetworkXNoPath:
-                    boundary_distance = float("inf")
-
-            outside_nodes = (set(G.nodes()) - H) | P
-            outside_graph = G.subgraph(outside_nodes)
-
-            try:
-                outside_distance = nx.shortest_path_length(outside_graph, u, v)
-                if outside_distance < boundary_distance:
-                    info(f"Outside distance: {outside_distance}", debug)
-                    info(f"Boundary distance: {boundary_distance}", debug)
-                    info(f"Shortcut found between {u} and {v} outside the current hull.", debug)
-                    outside_path = nx.shortest_path(outside_graph, u, v)
-                    info(f"Adding nodes {outside_path} to the hull.", debug)
-                    H.update(outside_path)
-                    info(f"The new hull is {H}", debug)
-
-                    changed = True
-                    break
-            except nx.NetworkXNoPath:
-                warning(f"No path found between {u} and {v} outside the current hull, convex hull might be the entire graph.")
-                break
-        if not changed:
-            break
-    success("Convex hull computation completed.", debug)
-    return H
 
 
 @typechecked
@@ -692,13 +348,19 @@ def compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = 
     """
     H: Set[Any] = set(S)
     iteration_counter = 0
+    
     while True:
-        info(f"=================================================== Iteration {iteration_counter} ===================================================", debug)
-        info(f"Current hull at start of iteration {iteration_counter}: {sorted(H)}", debug)
+        if debug:
+            info(f"=== Iteration {iteration_counter} ===")
+            info(f"Current hull at start of iteration {iteration_counter}: {sorted(H)}")
+        
         P = {u for u in H if any(v not in H for v in G.neighbors(u))}
         P = patch_boundary_for_connectivity(G, P, H, attraction_distances_dict=attraction_distances_dict, debug=debug)
-        info(f"Updated hull after patching: {sorted(H)}", debug)
-        info(f"Boundary nodes at iteration {iteration_counter}: {sorted(P)}", debug)
+        
+        if debug:
+            info(f"Updated hull after patching: {sorted(H)}")
+            info(f"Boundary nodes at iteration {iteration_counter}: {sorted(P)}")
+        
         if visualize_steps:
             try:
                 viz_G = nx.MultiDiGraph(G) if G is not None else None
@@ -709,6 +371,7 @@ def compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = 
                 gv.visualize()
             except Exception as e:
                 warning(f"Error visualizing initial state: {e}")
+        
         P_list = list(P)
         boundary_pairs = []
         for i in range(len(P_list)):
@@ -728,6 +391,7 @@ def compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = 
                     boundary_distance = float("inf")
             except nx.NetworkXNoPath:
                 boundary_distance = float("inf")
+            
             # Check for shortcuts outside the hull
             outside_nodes = (set(G.nodes()) - H) | P
             outside_graph = G.subgraph(outside_nodes)
@@ -751,24 +415,29 @@ def compute_graph_convex_hull(G: nx.Graph, S: Set[Any], visualize_steps: bool = 
                 outside_distance = len(outside_path) - 1
 
                 if outside_distance < boundary_distance:
-                    info(f"Outside distance: {outside_distance}", debug)
-                    info(f"Boundary distance: {boundary_distance}", debug)
-                    info(f"Shortcut found between {u} and {v} outside the current hull.", debug)
-                    info(f"Adding nodes {outside_path} to the hull.", debug)
+                    if debug:
+                        info(f"Outside distance: {outside_distance}")
+                        info(f"Boundary distance: {boundary_distance}")
+                        info(f"Shortcut found between {u} and {v} outside the current hull.")
+                        info(f"Adding nodes {outside_path} to the hull.")
 
                     H.update(outside_path)
-                    info(f"The new hull is {sorted(H)}", debug)
+                    
+                    if debug:
+                        info(f"The new hull is {sorted(H)}")
 
                     changed = True
                     break
             except nx.NetworkXNoPath:
                 warning(f"No path found between {u} and {v} outside the current hull, convex hull might be the entire graph.")
                 continue
+        
         iteration_counter += 1
         if not changed:
             break
 
-    success("Convex hull computation completed.", debug)
+    if debug:
+        success("Convex hull computation completed.")
     return H
 
 

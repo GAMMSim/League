@@ -7,10 +7,10 @@ import yaml
 import os
 
 try:
-    from lib.core.core import *
+    from lib.core.console import *
     from lib.utils.graph_utils import cast_to_multidigraph, convert_gml_to_multidigraph
 except ImportError:
-    from ..core.core import *
+    from ..core.console import *
     from ..utils.graph_utils import cast_to_multidigraph, convert_gml_to_multidigraph
 
 
@@ -46,7 +46,8 @@ def read_yml_file(file_path: str, search_if_not_found: bool = True, config_dir: 
         except FileNotFoundError:
             # If file not found and search is enabled
             if search_if_not_found:
-                dbg(f"File not found at {file_path}, searching recursively...", debug)
+                if debug:
+                    info(f"File not found at {file_path}, searching recursively...")
 
                 # Get just the filename in case a path was provided
                 file_name = os.path.basename(file_path)
@@ -65,7 +66,8 @@ def read_yml_file(file_path: str, search_if_not_found: bool = True, config_dir: 
                     error(f"Search root directory {search_root} does not exist.")
                     raise FileNotFoundError(f"Search root directory {search_root} does not exist.")
 
-                info(f"Searching for {file_name} in {search_root} and subdirectories...", debug)
+                if debug:
+                    info(f"Searching for {file_name} in {search_root} and subdirectories...")
 
                 # Search recursively for the file, including all subdirectories
                 found_path = None
@@ -134,7 +136,8 @@ def export_graph_config(config: dict, dirs: dict, debug: bool = False) -> nx.Mul
     G = export_graph_generic(graph_path)
     if not isinstance(G, nx.MultiDiGraph):
         warning(f"Graph {graph_name} is not a MultiDiGraph!")
-    success(f"Loaded graph: {graph_name}", debug)
+    if debug:
+        success(f"Loaded graph: {graph_name}")
     return G
 
 
@@ -170,7 +173,8 @@ def export_graph_pkl(filename: str, debug: bool = False) -> nx.MultiDiGraph:
     # Ensure the graph is a MultiDiGraph
     if not isinstance(G, nx.MultiDiGraph):
         G = cast_to_multidigraph(G, debug)
-    success(f"Graph loaded from {filename} with {len(G.nodes)} nodes.", debug)
+    if debug:
+        success(f"Graph loaded from {filename} with {len(G.nodes)} nodes.")
     return G
 
 
@@ -211,7 +215,8 @@ def export_all_graphs_pkl(path: str, debug: Optional[bool] = False) -> Union[boo
                 graph = pickle.load(f)
             # Assuming the graph has an attribute 'nodes' that returns a list or set of nodes.
             num_nodes = len(getattr(graph, "nodes", lambda: [])())
-            success(f"Graph loaded from {path} with {num_nodes} nodes.", debug)
+            if debug:
+                success(f"Graph loaded from {path} with {num_nodes} nodes.")
             if not isinstance(graph, nx.MultiDiGraph):
                 warning(f"Graph {path} is not a MultiDiGraph.")
                 graph = cast_to_multidigraph(graph, debug)
@@ -232,7 +237,8 @@ def export_all_graphs_pkl(path: str, debug: Optional[bool] = False) -> Union[boo
                     with open(file_path, "rb") as f:
                         graph = pickle.load(f)
                     num_nodes = len(getattr(graph, "nodes", lambda: [])())
-                    success(f"Graph loaded from {file_path} with {num_nodes} nodes.", debug)
+                    if debug:
+                        success(f"Graph loaded from {file_path} with {num_nodes} nodes.")
                     if not isinstance(graph, nx.MultiDiGraph):
                         warning(f"Graph {file_path} is not a MultiGraph.")
                         graph = cast_to_multidigraph(graph, debug)
@@ -275,11 +281,11 @@ def export_graph_dsg(path: Union[str, Path], debug: bool = False) -> nx.MultiDiG
         error("spark_dsg module is not installed. Please install it to use this function.")
         raise ImportError("spark_dsg module is required for DSG operations.")
 
-    warning("Calling export_graph_dsg() function, this function is not tested yet, please use with caution.", True)
+    warning("Calling export_graph_dsg() function, this function is not tested yet, please use with caution.")
     # Normalize path and verify existence
     dsg_path = Path(path)
     if not dsg_path.exists():
-        error(f"DSG file not found at {dsg_path}")  # replace with your logging function
+        error(f"DSG file not found at {dsg_path}")
         raise FileNotFoundError(f"DSG file not found at {dsg_path}")
 
     # Load the DSG from file
@@ -325,7 +331,8 @@ def export_graph_dsg(path: Union[str, Path], debug: bool = False) -> nx.MultiDiG
             raise Exception(f"Failed to cast Places graph to MultiDiGraph: {e}")
 
     # Log success
-    success(f"Exported DSG Places subgraph: {nx_places.number_of_nodes()} nodes, " f"{nx_places.number_of_edges()} edges.", debug)
+    if debug:
+        success(f"Exported DSG Places subgraph: {nx_places.number_of_nodes()} nodes, {nx_places.number_of_edges()} edges.")
 
     return nx_places
 
@@ -359,7 +366,8 @@ def export_graph_gml(filename: str, scale_factor: float = 1, offset_x: float = 0
 
     try:
         G = nx.read_gml(filename)
-        success(f"GML file loaded from {filename} with {len(G.nodes)} nodes.", debug)
+        if debug:
+            success(f"GML file loaded from {filename} with {len(G.nodes)} nodes.")
     except Exception as e:
         error(f"Error loading GML file from {filename}: {e}")
         raise Exception(f"Error loading GML file from {filename}: {e}")
@@ -390,7 +398,7 @@ def export_graph_generic(filename: str, debug: bool = False) -> nx.MultiDiGraph:
     if not os.path.exists(filename):
         error(f"Graph file does not exist at {filename}.")
         raise FileNotFoundError(f"Graph file does not exist at {filename}.")
-    
+
     # Check the file extension
     file_extension = os.path.splitext(filename)[1].lower()
     if file_extension == ".gml":

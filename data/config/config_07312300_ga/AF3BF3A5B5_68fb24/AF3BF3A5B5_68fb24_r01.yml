@@ -1,0 +1,125 @@
+agents:
+  alpha_config:
+    alpha_0:
+      capture_radius: 2
+      sensors: &id001
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 134
+      tagging_radius: 1
+    alpha_1:
+      start_node_id: 163
+    alpha_2:
+      start_node_id: 135
+    alpha_3:
+      start_node_id: 43
+    alpha_4:
+      start_node_id: 132
+  alpha_global: &id003
+    capture_radius: 2
+    sensors: *id001
+    speed: 1
+    tagging_radius: 1
+  beta_config:
+    beta_0:
+      capture_radius: 2
+      sensors: &id002
+      - map
+      - agent
+      - neighbor
+      speed: 1
+      start_node_id: 172
+      tagging_radius: 1
+    beta_1:
+      start_node_id: 71
+    beta_2:
+      start_node_id: 0
+    beta_3:
+      start_node_id: 157
+    beta_4:
+      start_node_id: 35
+  beta_global: &id004
+    capture_radius: 2
+    sensors: *id002
+    speed: 1
+    tagging_radius: 1
+defaults:
+  alpha_global: *id003
+  beta_global: *id004
+environment:
+  graph_name: graph_200_200_a.pkl
+  assignment: '00000000000101100000000000000111111000111111111111111111111111000000000000000000000000000000000000000000001000000000000000000001111111111111111001111111111111111111000000000000111111111111111111111100'
+  cut_edges:
+  - - 12
+    - 29
+  - - 13
+    - 5
+  - - 14
+    - 5
+  - - 11
+    - 5
+extra_parameters:
+  CONFIG_ID: 616a52a930
+  parameters:
+    alpha:
+      center_node: 40
+      distribution:
+        param:
+        - 5
+        - 2
+        type: normal
+      number: 5
+    alpha_flags:
+      center_node: 40
+      distribution:
+        param: 3
+        type: uniform
+      number: 3
+    beta:
+      center_node: 170
+      distribution:
+        param:
+        - 5
+        - 2
+        type: normal
+      number: 5
+    beta_flags:
+      center_node: 170
+      distribution:
+        param: 3
+        type: uniform
+      number: 3
+  timestamp: 2025-07-31 23:00:51:524
+game:
+  flags:
+    alpha_positions:
+    - 47
+    - 46
+    - 39
+    beta_positions:
+    - 174
+    - 73
+    - 19
+    weights: null
+  interaction: Error
+  max_time: Error
+  payoff: Error
+  rule: V2
+  save_log: false
+visualization:
+  colors:
+    alpha_flag: blue
+    alpha_global: blue
+    beta_flag: red
+    beta_global: red
+  draw_node_id: false
+  game_speed: 2
+  sizes:
+    flag_size: 18
+    global_agent_size: 13
+  visualization_engine: PYGAME
+  window_size:
+  - 3008
+  - 1692
