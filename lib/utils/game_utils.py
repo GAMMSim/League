@@ -887,47 +887,54 @@ def compute_payoff(payoff_config: Dict[str, Any], alpha_captures: int, beta_capt
 
 
 def check_and_install_dependencies() -> bool:
-    """
-    Check if required packages are installed and install them if they're missing.
+   """
+   Check if required packages are installed and install them if they're missing.
 
-    Returns:
-        bool: True if all dependencies are satisfied, False if installation failed.
-    """
-    import subprocess
-    import sys
+   Returns:
+       bool: True if all dependencies are satisfied, False if installation failed.
+   """
+   import subprocess
+   import sys
 
-    # Required packages mapping: import_name -> pip package name
-    required_packages = {
-        "yaml": "pyyaml",
-        "osmnx": "osmnx",
-        "networkx": "networkx",
-    }
+   # Required packages mapping: import_name -> (pip_package_name, version)
+   required_packages = {
+       "yaml": ("pyyaml", "6.0.2"),
+       "cbor2": ("cbor2", "5.6.5"),
+       "gamms": ("gamms", "0.2"),
+       "matplotlib": ("matplotlib", "3.10.5"),
+       "networkx": ("networkx", "3.4.2"),
+       "numpy": ("numpy", "2.3.2"),
+       "pygame": ("pygame", "2.6.1"),
+       "scipy": ("scipy", "1.16.1"),
+       "shapely": ("shapely", "2.1.1"),
+       "typeguard": ("typeguard", "4.4.2"),
+   }
 
-    missing_packages: List[str] = []
+   missing_packages: List[str] = []
 
-    for import_name, pip_name in required_packages.items():
-        try:
-            __import__(import_name)
-            success(f"✓ {import_name} is already installed")
-        except ImportError:
-            warning(f"✗ {import_name} is not installed")
-            missing_packages.append(pip_name)
+   for import_name, (pip_name, version) in required_packages.items():
+       try:
+           __import__(import_name)
+           success(f"✓ {import_name} is already installed")
+       except ImportError:
+           warning(f"✗ {import_name} is not installed")
+           missing_packages.append(f"{pip_name}=={version}")
 
-    if missing_packages:
-        info("Installing missing packages...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-            for package in missing_packages:
-                info(f"Installing {package}...")
-                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-                success(f"✓ Successfully installed {package}")
-        except subprocess.CalledProcessError as e:
-            error(f"Failed to install packages: {e}")
-            warning("Please try installing the packages manually:\n" + "\n".join([f"pip install {pkg}" for pkg in missing_packages]))
-            return False
-        except Exception as e:
-            error(f"An unexpected error occurred: {e}")
-            return False
+   if missing_packages:
+       info("Installing missing packages...")
+       try:
+           subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+           for package in missing_packages:
+               info(f"Installing {package}...")
+               subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+               success(f"✓ Successfully installed {package}")
+       except subprocess.CalledProcessError as e:
+           error(f"Failed to install packages: {e}")
+           warning("Please try installing the packages manually:\n" + "\n".join([f"pip install {pkg}" for pkg in missing_packages]))
+           return False
+       except Exception as e:
+           error(f"An unexpected error occurred: {e}")
+           return False
 
-    success("All required dependencies are satisfied!")
-    return True
+   success("All required dependencies are satisfied!")
+   return True

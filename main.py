@@ -1,3 +1,6 @@
+from lib.utils.game_utils import check_and_install_dependencies
+check_and_install_dependencies()
+
 import os
 import pathlib
 import traceback
@@ -17,6 +20,7 @@ root_path = current_path.parent
 
 import example_strategy as alpha_team
 import example_strategy as beta_team
+
 
 RESULT_PATH = os.path.join(root_path, "data/result")
 alpha_name = alpha_team.__name__.split(".")[-1]

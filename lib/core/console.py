@@ -3,37 +3,10 @@ import sys
 import time
 import inspect
 from enum import Enum
-from rich.theme import Theme
 from datetime import datetime
-from rich.console import Console
 from typeguard import typechecked
 from contextlib import contextmanager
 from typing import Any, Iterable, Optional, Union, List, Tuple, Dict, Set
-
-DRACULA_THEME = Theme({
-    "info": "bold #bd93f9",      # Cyan
-    "warning": "bold #f1fa8c",   # Yellow
-    "error": "bold #ff5555",     # Red
-    "success": "bold #50fa7b",   # Green
-    "attacker": "bold #ff5555",  # Pink
-    "defender": "bold #8be9fd",  # Purple
-    "header": "bold #f8f8f2 on #44475a",
-    "setup": "bold #f8f8f2 on #6272a4",
-    "value_good": "bold #50fa7b",
-    "value_med": "bold #f1fa8c",
-    "value_bad": "bold #ffb86c",
-    "value_critical": "bold #ff5555",
-    "title": "bold #f8f8f2 on #6272a4",
-    "comment": "#6272a4",
-    "foreground": "#f8f8f2",
-    "background": "#282a36",
-    "current_line": "#44475a",
-    "selection": "#44475a",
-    "orange": "bold #ffb86c",
-    "pink": "bold #ff79c6",
-})
-
-console = Console(theme=DRACULA_THEME)
 
 # Global log level setting - can be changed at runtime
 class LogLevel(Enum):
