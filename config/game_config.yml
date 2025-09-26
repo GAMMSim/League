@@ -1,0 +1,19 @@
+# Config on the game settings
+# Including visual settings
+
+visualization:
+  window_size: [3008, 1692]         # Window width and height in pixels
+  game_speed: 2                     # Speed multiplier for game visualization
+  draw_node_id: false               # Whether to display node IDs on visualization
+  visualization_engine: "PYGAME"   # Visualization backend to use
+  sizes:
+    flag_size: 18
+    global_agent_size: 13
+
+agents:
+  red_global:
+    color: "red"
+    size: 13
+  blue_global:
+    color: "blue"
+    size: 13

@@ -1,0 +1,36 @@
+game:
+  game_rule: "v1.2"
+  max_time: 200
+  interaction_model:
+    tagging: both_kill
+    capture: kill
+    prioritize: tagging
+  payoff_model:
+    model: zero_sun_reward
+    capture_constant: 1.0
+    tagging_constant: 0.5
+    detection_constant: 0.2
+  
+
+agents:
+  red_global:
+    speed: 1
+    capture_radius: 2
+    sensing_radius: 5.0
+    sensors: ["map", "agent", "candidate_flag", "attacker_range"]
+  blue_global:
+    speed: 1
+    tagging_radius: 1
+    sensing_radius: 4.0
+    sensors: ["map", "team", "defender_range", "flag", "static_range"]
+  red_config: {}
+  blue_config: {}
+
+flags:
+  real_positions: null
+  candidate_positions: null
+environment:
+  graph_name: null
+  blue_stationary_sensor_radius: 6.0
+  blue_static_sensor_positions: null
+generator: {}

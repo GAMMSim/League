@@ -8,6 +8,7 @@ from pathlib import Path
 
 try:
     import cbor2
+
     CBOR_AVAILABLE = True
 except ImportError:
     CBOR_AVAILABLE = False
@@ -20,16 +21,19 @@ except ImportError:
 
 class LoggerError(Exception):
     """Custom exception for Logger-related errors."""
+
     pass
 
 
 class ValidationError(LoggerError):
     """Exception raised when data validation fails."""
+
     pass
 
 
 class FileFormatError(LoggerError):
     """Exception raised when file format is not supported or corrupted."""
+
     pass
 
 
@@ -38,18 +42,11 @@ class Logger:
     """
     Enhanced logging system supporting both JSON and CBOR formats with validation and performance optimizations.
     """
-    
+
     # Supported file formats
-    SUPPORTED_FORMATS = {'.json': 'json', '.cbor': 'cbor'}
-    
-    def __init__(
-        self, 
-        name: str, 
-        metadata: Optional[Dict[str, Any]] = None, 
-        path: str = "",
-        validate_schema: bool = True,
-        filename_pattern: str = "{name}_{hash}_{timestamp}"
-    ):
+    SUPPORTED_FORMATS = {".json": "json", ".cbor": "cbor"}
+
+    def __init__(self, name: str, metadata: Optional[Dict[str, Any]] = None, path: str = "", validate_schema: bool = True, filename_pattern: str = "{name}_{hash}_{timestamp}"):
         """
         Initialize Logger with enhanced features.
 
@@ -66,12 +63,12 @@ class Logger:
         self.path: str = path
         self.validate_schema: bool = validate_schema
         self.filename_pattern: str = filename_pattern
-        
+
         # Internal state for validation and performance
         self._schema_keys: Optional[set] = None
         self._record_count: int = 0
         self._time_range: Optional[tuple] = None
-        
+
         # Check CBOR availability on first use
         if not CBOR_AVAILABLE:
             warning("CBOR support not available. Install cbor2 package for CBOR functionality.")
@@ -80,16 +77,16 @@ class Logger:
         """Validate record structure and consistency."""
         if not self.validate_schema:
             return
-            
+
         if not isinstance(record, dict):
             raise ValidationError(f"Record must be a dictionary, got {type(record)}")
-            
-        if 'time' not in record:
+
+        if "time" not in record:
             raise ValidationError("Record must contain 'time' field")
-            
-        if not isinstance(record['time'], int):
+
+        if not isinstance(record["time"], int):
             raise ValidationError(f"Time field must be an integer, got {type(record['time'])}")
-            
+
         # Schema consistency check
         if self._schema_keys is None:
             self._schema_keys = set(record.keys())
@@ -108,9 +105,9 @@ class Logger:
     def _update_stats(self, record: Dict[str, Any]) -> None:
         """Update internal statistics for performance optimization."""
         self._record_count += 1
-        
+
         # Update time range
-        record_time = record['time']
+        record_time = record["time"]
         if self._time_range is None:
             self._time_range = (record_time, record_time)
         else:
@@ -131,25 +128,20 @@ class Logger:
         hash_input = (meta_str + current_time).encode("utf-8")
         hash_value = hashlib.sha256(hash_input).hexdigest()[:16]  # Shorter hash
         timestamp = str(int(time.time()))
-        
-        filename = self.filename_pattern.format(
-            name=self.name,
-            hash=hash_value,
-            timestamp=timestamp,
-            metadata_hash=hashlib.sha256(meta_str.encode()).hexdigest()[:8]
-        )
+
+        filename = self.filename_pattern.format(name=self.name, hash=hash_value, timestamp=timestamp, metadata_hash=hashlib.sha256(meta_str.encode()).hexdigest()[:8])
         return filename + format_ext
 
     def _write_data(self, data: Dict[str, Any], filepath: str, file_format: str) -> None:
         """Write data in the specified format with error handling."""
         try:
-            if file_format == 'json':
-                with open(filepath, 'w') as f:
+            if file_format == "json":
+                with open(filepath, "w") as f:
                     json.dump(data, f, indent=4)
-            elif file_format == 'cbor':
+            elif file_format == "cbor":
                 if not CBOR_AVAILABLE:
                     raise FileFormatError("CBOR format not available. Install cbor2 package.")
-                with open(filepath, 'wb') as f:
+                with open(filepath, "wb") as f:
                     cbor2.dump(data, f)
             else:
                 raise FileFormatError(f"Unsupported format: {file_format}")
@@ -161,13 +153,13 @@ class Logger:
     def _read_data(self, filepath: str, file_format: str) -> Dict[str, Any]:
         """Read data in the specified format with error handling."""
         try:
-            if file_format == 'json':
-                with open(filepath, 'r') as f:
+            if file_format == "json":
+                with open(filepath, "r") as f:
                     return json.load(f)
-            elif file_format == 'cbor':
+            elif file_format == "cbor":
                 if not CBOR_AVAILABLE:
                     raise FileFormatError("CBOR format not available. Install cbor2 package.")
-                with open(filepath, 'rb') as f:
+                with open(filepath, "rb") as f:
                     return cbor2.load(f)
             else:
                 raise FileFormatError(f"Unsupported format: {file_format}")
@@ -188,9 +180,9 @@ class Logger:
         """
         if not isinstance(time_value, int):
             raise ValidationError(f"Time value must be an integer, got {type(time_value)}")
-            
+
         record = {"time": time_value, **data}
-        
+
         try:
             self._validate_record(record)
             self._records.append(record)
@@ -216,14 +208,14 @@ class Logger:
                     self._validate_record(record)
                 except ValidationError as e:
                     raise ValidationError(f"Invalid record at index {i}: {str(e)}")
-        
+
         self._records = records
         self._record_count = len(records)
-        
+
         # Recalculate time range
         self._time_range = None
         if records:
-            times = [r['time'] for r in records]
+            times = [r["time"] for r in records]
             self._time_range = (min(times), max(times))
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -253,9 +245,9 @@ class Logger:
         """
         if filename is None:
             filename = self._generate_filename(".json" if format == "json" else ".cbor" if format == "cbor" else ".json")
-        
+
         full_path = os.path.join(self.path, filename)
-        
+
         if os.path.exists(full_path) and not force:
             raise FileExistsError(f"File {full_path} already exists. Use force=True to overwrite.")
 
@@ -264,18 +256,10 @@ class Logger:
             detected_format = self._detect_format(filename)
         else:
             detected_format = format
-            if detected_format not in ['json', 'cbor']:
+            if detected_format not in ["json", "cbor"]:
                 raise FileFormatError(f"Invalid format: {format}. Use 'json', 'cbor', or 'auto'.")
 
-        data_to_write = {
-            "metadata": self.metadata,
-            "records": self._records,
-            "stats": {
-                "record_count": self._record_count,
-                "time_range": self._time_range,
-                "schema_keys": list(self._schema_keys) if self._schema_keys else None
-            }
-        }
+        data_to_write = {"metadata": self.metadata, "records": self._records, "stats": {"record_count": self._record_count, "time_range": self._time_range, "schema_keys": list(self._schema_keys) if self._schema_keys else None}}
 
         self._write_data(data_to_write, full_path, detected_format)
         info(f"Successfully wrote {self._record_count} records to {full_path} ({detected_format} format)")
@@ -289,7 +273,7 @@ class Logger:
             filename (str): The name of the file to read from.
         """
         full_path = os.path.join(self.path, filename)
-        
+
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File not found: {full_path}")
 
@@ -299,20 +283,20 @@ class Logger:
         # Validate loaded data structure
         if not isinstance(data_loaded, dict):
             raise FileFormatError("Invalid file format: root must be a dictionary")
-        
+
         if "metadata" not in data_loaded or "records" not in data_loaded:
             raise FileFormatError("Invalid file format: missing 'metadata' or 'records'")
 
         self.metadata = data_loaded.get("metadata", {})
         records = data_loaded.get("records", [])
-        
+
         # Load stats if available (for performance optimization)
         stats = data_loaded.get("stats", {})
         self._record_count = stats.get("record_count", len(records))
         self._time_range = tuple(stats["time_range"]) if stats.get("time_range") else None
         schema_keys = stats.get("schema_keys")
         self._schema_keys = set(schema_keys) if schema_keys else None
-        
+
         self.set_records(records)  # This will validate records if validation is enabled
         info(f"Successfully loaded {len(records)} records from {full_path} ({file_format} format)")
 
@@ -333,7 +317,7 @@ class Logger:
             min_time, max_time = self._time_range
             if time_max < min_time or time_min > max_time:
                 return []
-        
+
         return [record for record in self._records if time_min <= record["time"] <= time_max]
 
     def extract_by_keys(self, keys: List[str]) -> List[Dict[str, Any]]:
@@ -352,7 +336,7 @@ class Logger:
             # Always include time unless explicitly omitted
             if "time" not in keys:
                 new_record["time"] = record["time"]
-            
+
             for key in keys:
                 if key in record:
                     new_record[key] = record[key]
@@ -369,10 +353,10 @@ class Logger:
         """
         if not isinstance(time_value, int):
             raise ValidationError(f"Time value must be an integer, got {type(time_value)}")
-            
+
         summary = {"summary": True, "time": time_value}
         summary.update(summary_data)
-        
+
         # Don't validate summary records as they may have different schema
         old_validate = self.validate_schema
         self.validate_schema = False
@@ -403,7 +387,7 @@ class Logger:
         """Get all unique keys across all records."""
         if self._schema_keys and self.validate_schema:
             return self._schema_keys.copy()
-        
+
         # Fallback: scan all records
         all_keys = set()
         for record in self._records:
@@ -421,12 +405,7 @@ class Logger:
 # Example usage and testing
 if __name__ == "__main__":
     # Create an instance of Logger with enhanced features
-    logger = Logger(
-        "MyLogger", 
-        metadata={"version": "2.0", "description": "Enhanced log file"},
-        filename_pattern="{name}_v{metadata_hash}_{timestamp}",
-        validate_schema=True
-    )
+    logger = Logger("MyLogger", metadata={"version": "2.0", "description": "Enhanced log file"}, filename_pattern="{name}_v{metadata_hash}_{timestamp}", validate_schema=True)
 
     # Log some data with integer timestamps
     logger.log_data({"temperature": 23.5, "humidity": 60}, time_value=1000)
@@ -435,7 +414,7 @@ if __name__ == "__main__":
     # Test various features
     print("Global Metadata:")
     print(logger.get_metadata())
-    
+
     print(f"\nRecord count: {logger.get_record_count()}")
     print(f"Time range: {logger.get_time_range()}")
     print(f"Unique keys: {logger.get_unique_keys()}")
@@ -452,7 +431,7 @@ if __name__ == "__main__":
     if CBOR_AVAILABLE:
         cbor_filename = logger.write_to_file("test_data.cbor", format="cbor", force=True)
         print(f"Saved to CBOR: {cbor_filename}")
-        
+
         # Test reading CBOR
         new_logger = Logger("TestRead")
         new_logger.read_from_file("test_data.cbor")

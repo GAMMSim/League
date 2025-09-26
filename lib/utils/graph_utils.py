@@ -15,11 +15,20 @@ except ImportError:
         from ..core.console import *
     except ImportError:
         # Fallback logging functions if core module not available
-        def debug(msg: str): print(f"DEBUG: {msg}")
-        def info(msg: str): print(f"INFO: {msg}")
-        def warning(msg: str): print(f"WARNING: {msg}")
-        def error(msg: str): print(f"ERROR: {msg}")
-        def success(msg: str): print(f"SUCCESS: {msg}")
+        def debug(msg: str):
+            print(f"DEBUG: {msg}")
+
+        def info(msg: str):
+            print(f"INFO: {msg}")
+
+        def warning(msg: str):
+            print(f"WARNING: {msg}")
+
+        def error(msg: str):
+            print(f"ERROR: {msg}")
+
+        def success(msg: str):
+            print(f"SUCCESS: {msg}")
 
 
 @typechecked
@@ -39,7 +48,7 @@ def cast_to_multidigraph(G: nx.DiGraph) -> nx.MultiDiGraph:
         nx.MultiDiGraph: A MultiDiGraph with bidirectional edges and unique 'id' for every edge.
     """
     debug(f"Converting DiGraph with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges to MultiDiGraph")
-    
+
     MD = nx.MultiDiGraph()
     MD.add_nodes_from(G.nodes(data=True))
 
@@ -85,8 +94,8 @@ def convert_gml_to_multidigraph(G: nx.Graph, scale_factor: float = 1, offset_x: 
         nx.MultiDiGraph: Spatial MultiDiGraph with LineString edges
     """
     debug(f"Converting GML graph with scale_factor={scale_factor}, offset_x={offset_x}, offset_y={offset_y}")
-    
-    try: 
+
+    try:
         # Create new DiGraph
         spatial_graph = nx.DiGraph()
 
@@ -108,17 +117,14 @@ def convert_gml_to_multidigraph(G: nx.Graph, scale_factor: float = 1, offset_x: 
             u_coords = spatial_graph.nodes[u]
             v_coords = spatial_graph.nodes[v]
 
-            linestring = LineString([
-                (u_coords["x"], u_coords["y"]),
-                (v_coords["x"], v_coords["y"])
-            ])
-            length = ((v_coords["x"] - u_coords["x"])**2 + (v_coords["y"] - u_coords["y"])**2)**0.5
+            linestring = LineString([(u_coords["x"], u_coords["y"]), (v_coords["x"], v_coords["y"])])
+            length = ((v_coords["x"] - u_coords["x"]) ** 2 + (v_coords["y"] - u_coords["y"]) ** 2) ** 0.5
 
             spatial_graph.add_edge(u, v, id=edge_id, linestring=linestring, length=length)
             edge_id += 1
-            
+
         debug(f"Added {spatial_graph.number_of_edges()} edges with LineString geometry")
-        
+
     except Exception as e:
         error(f"Error converting gml to spatial DiGraph: {e}")
         raise Exception(f"Error converting to gml spatial DiGraph: {e}")
@@ -148,7 +154,7 @@ def generate_simple_grid(rows: int = 10, cols: int = 10) -> nx.MultiDiGraph:
                          and represented as a MultiDiGraph.
     """
     debug(f"Generating simple grid with {rows} rows and {cols} columns")
-    
+
     # Create a grid graph with nodes as tuples.
     G = nx.grid_2d_graph(rows, cols)
     # Convert node labels to integers.
@@ -182,7 +188,7 @@ def generate_lattice_grid(rows: int = 10, cols: int = 10) -> nx.MultiDiGraph:
                          attributes, and represented as a MultiDiGraph.
     """
     debug(f"Generating lattice grid with {rows} rows and {cols} columns (including diagonals)")
-    
+
     # Start with an undirected 2D grid
     G = nx.grid_2d_graph(rows, cols)
 
@@ -232,7 +238,7 @@ def generate_triangular_lattice_graph(rows: int = 10, cols: int = 10) -> nx.Mult
                          and 'x','y' positional attributes.
     """
     debug(f"Generating triangular lattice graph with {rows} rows and {cols} columns")
-    
+
     # Start from an empty undirected graph
     G = nx.Graph()
 
@@ -293,7 +299,7 @@ def generate_random_delaunay_graph(n_points: int = 100, side: float = 1.0, seed:
         nx.MultiDiGraph: nodes 0..n_points-1 with 'x','y' attrs and triangulation edges.
     """
     debug(f"Generating random Delaunay graph with {n_points} points, side={side}, seed={seed}")
-    
+
     # 1) Sample points in [0, side]^2
     rng = np.random.default_rng(seed)
     points = rng.random((n_points, 2)) * side
@@ -346,7 +352,7 @@ def renumber_graph(G: nx.MultiDiGraph) -> nx.MultiDiGraph:
         nx.MultiDiGraph: A new multigraph with nodes renumbered from 0 to n-1.
     """
     debug(f"Renumbering graph with {G.number_of_nodes()} nodes")
-    
+
     try:
         H = nx.MultiDiGraph()
         # Map old node IDs to new node IDs.
@@ -368,7 +374,7 @@ def renumber_graph(G: nx.MultiDiGraph) -> nx.MultiDiGraph:
                 edge_data["id"] = edge_id
                 edge_id += 1
             H.add_edge(new_u, new_v, **edge_data)
-            
+
         success(f"Graph renumbered with {len(H.nodes)} nodes and {H.number_of_edges()} edges")
         return H
 
@@ -398,7 +404,7 @@ def reduce_graph_to_size(G: nx.MultiDiGraph, node_limit: int) -> nx.MultiDiGraph
         Exception: Propagates any errors encountered during graph reduction.
     """
     debug(f"Reducing graph from {G.number_of_nodes()} nodes to at most {node_limit} nodes")
-    
+
     try:
         # If the graph is already small enough, renumber and return it.
         if G.number_of_nodes() <= node_limit:
@@ -417,7 +423,7 @@ def reduce_graph_to_size(G: nx.MultiDiGraph, node_limit: int) -> nx.MultiDiGraph
         # Otherwise, perform a BFS from a random node in the largest component.
         start_node = random.choice(list(largest_cc))
         debug(f"Starting BFS from node {start_node}")
-        
+
         subgraph_nodes: Set[Any] = {start_node}
         frontier: List[Any] = [start_node]
         nodes_added_in_iteration = 0
@@ -426,16 +432,16 @@ def reduce_graph_to_size(G: nx.MultiDiGraph, node_limit: int) -> nx.MultiDiGraph
             current = frontier.pop(0)
             # For MultiDiGraph, consider both successors and predecessors.
             neighbors = list(G.successors(current)) + list(G.predecessors(current))
-            
+
             for neighbor in neighbors:
                 if neighbor not in subgraph_nodes:
                     subgraph_nodes.add(neighbor)
                     frontier.append(neighbor)
                     nodes_added_in_iteration += 1
-                    
+
                     if len(subgraph_nodes) >= node_limit:
                         break
-                        
+
             # Log progress periodically
             if nodes_added_in_iteration >= 100:
                 debug(f"BFS progress: {len(subgraph_nodes)} nodes selected")
@@ -473,7 +479,7 @@ def compute_x_neighbors(G: nx.MultiDiGraph, nodes: Union[List[Any], Set[Any]], d
     """
     node_set = set(nodes)  # Convert input to a set if it's not already
     debug(f"Computing {distance}-hop neighbors for {len(node_set)} starting nodes")
-    
+
     result: Set[Any] = set(node_set)
     initial_count = len(result)
 
@@ -484,42 +490,60 @@ def compute_x_neighbors(G: nx.MultiDiGraph, nodes: Union[List[Any], Set[Any]], d
 
     neighbors_found = len(result) - initial_count
     debug(f"Found {neighbors_found} additional neighbors within distance {distance}")
-    
+
     return result
 
 
-# Example usage:
-# if __name__ == "__main__":
-#     try:
-#         from lib.core.console_logger import *
-#         import lib.visual.graph_visualizer as gfvis
-#         from lib.utils.file_utils import export_graph_pkl, add_root_folder_to_sys_path
-#         from lib.utils.strategy_utils import compute_convex_hull_and_perimeter, compute_attraction_distances
-#     except ModuleNotFoundError:
-#         from ..core.console_logger import *
-#         from visual import graph_visualizer as gfvis
+@typechecked
+def compute_territory_distbase(G: nx.MultiDiGraph, set0_nodes: List[int], set1_nodes: List[int]) -> str:
+    """
+    Compute the territory based on distance to the two sets of nodes.
 
-#     # G = generate_random_delaunay_graph(n_points=400, side=10, seed=42)
-#     # G = generate_simple_grid(rows=20, cols=20)
-#     # G = generate_lattice_grid(rows=20, cols=20)
+    Args:
+        G: NetworkX MultiDiGraph
+        set0_nodes: List of node IDs belonging to set 0
+        set1_nodes: List of node IDs belonging to set 1
 
-#     root_folder = add_root_folder_to_sys_path()
+    Returns:
+        Binary string where position i represents node i's assignment (0 or 1).
+        Leading zeros are preserved. Equal distances are randomly assigned.
+    """
+    num_nodes = G.number_of_nodes()
+    assignment = []
 
-#     config_file_path = os.path.join(root_folder, "data/config/config_04151259_ga/F5A10D10_0ac5d2/F5A10D10_0ac5d2_r38.yml")
-#     graph_file_path = os.path.join(root_folder, "data/graphs/graph_200_200_a.pkl")  # Example path to your graph file
+    for node_id in range(num_nodes):
+        if node_id not in G.nodes():
+            # If node doesn't exist, default to 0
+            assignment.append("0")
+            continue
 
-#     G = export_graph_pkl(graph_file_path)
-#     visualizer = gfvis.GraphVisualizer(file_path=config_file_path, mode="interactive", simple_layout=False, node_size=100)
+        # Compute shortest distance to any node in set 0
+        min_dist_to_set0 = float("inf")
+        for set0_node in set0_nodes:
+            if set0_node in G.nodes():
+                try:
+                    dist = nx.shortest_path_length(G, node_id, set0_node)
+                    min_dist_to_set0 = min(min_dist_to_set0, dist)
+                except nx.NetworkXNoPath:
+                    continue
 
-#     flag_positions = [30, 31, 13, 5, 182]
-#     target_nodes = compute_x_neighbors(G, set(flag_positions), 2)
+        # Compute shortest distance to any node in set 1
+        min_dist_to_set1 = float("inf")
+        for set1_node in set1_nodes:
+            if set1_node in G.nodes():
+                try:
+                    dist = nx.shortest_path_length(G, node_id, set1_node)
+                    min_dist_to_set1 = min(min_dist_to_set1, dist)
+                except nx.NetworkXNoPath:
+                    continue
 
-#     H, P = compute_convex_hull_and_perimeter(G, target_nodes, visualize_steps=False, attraction_distances_dict=None)
-#     print(target_nodes)
-#     print(f"Convex Hull: {H}")
-#     print(f"Perimeter: {P}")
+        # Assign to closer set, randomly choose if equal
+        if min_dist_to_set0 < min_dist_to_set1:
+            assignment.append("0")
+        elif min_dist_to_set1 < min_dist_to_set0:
+            assignment.append("1")
+        else:
+            # Equal distances (including both inf) - randomly assign
+            assignment.append(random.choice(["0", "1"]))
 
-#     visualizer.color_nodes(list(H), color="green", mode="transparent", name="Convex Hull")
-#     visualizer.color_nodes(P, color="orange", mode="solid", name="Perimeter")
-
-#     visualizer.visualize()
+    return "".join(assignment)
