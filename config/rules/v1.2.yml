@@ -6,10 +6,10 @@ game:
     capture: kill
     prioritize: tagging
   payoff_model:
-    model: zero_sun_reward
+    model: zero_sum_reward
     capture_constant: 1.0
     tagging_constant: 0.5
-    detection_constant: 0.2
+    detection_constant: 0.1
   
 
 agents:

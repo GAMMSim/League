@@ -371,32 +371,20 @@ class VisEngine:
         """Render function for agent name labels."""
         x = data.get("x", 0)
         y = data.get("y", 0)
-        text = data.get("text", "")
+        text = data.get("text", "") # text is 'blue_6'
         color = data.get("color", (0, 0, 0))
-        size = data.get("size", 12)
-        # Convert text to unicode or bytes
-        if isinstance(text, str):
-            try:
-                converted_text = text.encode('utf-8')
-            except Exception:
-                converted_text = text  # Fallback to original string
-        
-        # Render text label - GAMMS render_text doesn't accept size parameter
-        # Try different methods to render text with size
+        simplified_text = text.split('_')[0][0] + text.split('_')[1] if '_' in text else text.split('_')[0][0]
+
+        # Make sure text is a string before rendering
+        if not isinstance(simplified_text, str):
+            simplified_text = str(simplified_text)
+
         try:
-            # Method 1: Try font_size parameter
-            ctx.visual.render_text(x, y, text, color=color, font_size=size)
-        except TypeError:
-            try:
-                # Method 2: Try without size parameter
-                ctx.visual.render_text(x, y, text, color=color)
-            except Exception:
-                # Method 3: Fallback - render simple text
-                try:
-                    ctx.visual.render_text(x, y, text)
-                except Exception as e:
-                    warning(f"Failed to render text label '{text}': {e}")
-                    pass
+            # Pass the actual 'text' variable to the function
+            ctx.visual.render_text(simplified_text, x=x, y=y, color=color)
+        except Exception as e:
+            warning(f"Failed to render text label '{text}': {e}")
+            pass
 
     def update_agent_label(self, agent_name: str) -> None:
         """
@@ -448,8 +436,22 @@ class VisEngine:
         """Update positions of all agent name labels."""
         try:
             debug("Updating all agent label positions")
+            # Create a copy of the set to avoid modification during iteration
             for agent_name in list(self.agent_labels_created):
-                self.update_agent_label(agent_name)
+                # Check if agent still exists before updating
+                try:
+                    agent = self.ctx.agent.get_agent(agent_name)
+                    if agent is None:
+                        # Agent no longer exists, remove its label
+                        debug(f"Agent '{agent_name}' no longer exists, removing label")
+                        self.remove_agent_label(agent_name)
+                    else:
+                        # Agent exists, update its label
+                        self.update_agent_label(agent_name)
+                except Exception as e:
+                    # If we can't get the agent, assume it's been deleted and remove label
+                    debug(f"Cannot access agent '{agent_name}', removing label: {e}")
+                    self.remove_agent_label(agent_name)
             debug("Finished updating agent label positions")
             
         except Exception as e:

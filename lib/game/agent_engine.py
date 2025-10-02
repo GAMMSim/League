@@ -12,7 +12,8 @@ from lib.core.console import *
 class AgentEngine:
     """Centralized agent management system"""
 
-    def __init__(self, ctx: Any, teams: List[str], default_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, ctx: Any, teams: List[str], default_config: Optional[Dict[str, Any]] = None, 
+             vis_engine: Optional[Any] = None, sensor_engine: Optional[Any] = None):
         """
         Initialize AgentEngine with support for multiple teams
 
@@ -20,11 +21,14 @@ class AgentEngine:
             ctx: Game context object
             teams: List of team names (e.g., ["red", "blue", "green"])
             default_config: Default configuration values for agent parameters
+            vis_engine: Optional visualization engine for label cleanup
         """
         debug(f"Initializing AgentEngine with teams: {teams}")
         self.ctx = ctx
         self.teams = teams
+        self.vis_engine = vis_engine
         self.agents: Dict[str, AgentController] = {}
+        self.sensor_engine = sensor_engine
 
         # Dynamic team counters - one counter per team
         self.team_counts: Dict[str, int] = {team: 0 for team in teams}
@@ -172,58 +176,58 @@ class AgentEngine:
     def _create_single_agent(self, name: str, team: str, config: Dict[str, Any]) -> Optional[AgentController]:
         """
         Create a single agent from configuration
-
+        
         Args:
             name: Agent name
             team: Team name
             config: Merged configuration for this agent
-
+            
         Returns:
             Created AgentController or None if creation failed
         """
         try:
             debug(f"Creating agent '{name}' for team '{team}'")
-            # Use helper method to extract parameters with defaults
+            
+            # Extract agent parameters
             agent_params = self._extract_agent_parameters(config)
             info(f"Extracted parameters for agent '{name}': {agent_params}")
-
+            
             # Prepare context creation parameters
             ctx_params = {
                 "team": team,
-                "sensors": agent_params["sensors"],
                 "current_node_id": agent_params["start_node_id"],
                 "start_node_id": agent_params["start_node_id"],
             }
-            debug(f"agent_params for {name}: {agent_params}")
-
-            # Add optional visualization parameters
+            
+            # Add visualization parameters
             color = agent_params.get("color")
             if color is not None:
                 ctx_params["color"] = color
             else:
                 warning(f"No color specified for agent '{name}', using default")
                 ctx_params["color"] = self.default_config.get("color")
-
+            
             size = agent_params.get("size")
             if size is not None:
                 ctx_params["size"] = size
             else:
                 warning(f"No size specified for agent '{name}', using default")
                 ctx_params["size"] = self.default_config.get("size")
-
+            
             # Create the underlying GAMMS agent in context
             self.ctx.agent.create_agent(name, **ctx_params)
-
+            
             # Get the created GAMMS agent from context
             gamms_agent = self.ctx.agent.get_agent(name)
-
+            
             # Get shared AgentMap for this team
             agent_map = self.team_maps[team]
+            team_cache = self.team_caches[team]
 
-            # Extract extra parameters (anything not in standard params)
+            # Extract extra parameters
             standard_params = list(agent_params.keys())
             extra_params = {k: v for k, v in config.items() if k not in standard_params}
-
+            extra_params['team_cache'] = team_cache  # ← Add this
             # Create the AgentController wrapper
             agent_controller = AgentController(
                 gamms_agent=gamms_agent,
@@ -231,14 +235,44 @@ class AgentEngine:
                 map=agent_map,
                 start_node_id=agent_params["start_node_id"],
                 team=team,
-                capture_radius=agent_params["capture_radius"],
-                tagging_radius=agent_params["tagging_radius"],
-                **extra_params,
+                capture_radius=agent_params.get("capture_radius", 0),
+                tagging_radius=agent_params.get("tagging_radius", 0),
+                **extra_params
             )
-
+            
+            # ===== SENSOR INTEGRATION =====
+            # Create and register sensors if sensor_engine is available
+            if self.sensor_engine is not None:
+                try:
+                    # Get sensor configuration from agent params
+                    sensor_list = agent_params.get("sensors", [])
+                    sensing_radius = agent_params.get("sensing_radius", None)
+                    
+                    if sensor_list:
+                        # Create sensors for this agent
+                        sensor_mappings = self.sensor_engine.create_sensors_for_agent(
+                            agent_name=name,
+                            team=team,
+                            sensor_list=sensor_list,
+                            sensing_radius=sensing_radius
+                        )
+                        
+                        # Register sensors to the agent
+                        self.sensor_engine.register_sensors_to_agent(
+                            agent=agent_controller,
+                            sensor_mappings=sensor_mappings
+                        )
+                        
+                        info(f"Registered {len(sensor_mappings)} sensors to {name}")
+                        
+                except Exception as e:
+                    warning(f"Failed to setup sensors for {name}: {e}")
+                    # Continue agent creation even if sensors fail
+            # ===== END SENSOR INTEGRATION =====
+            
             info(f"Created AgentController '{name}' for team '{team}' at node {agent_params['start_node_id']}")
             return agent_controller
-
+            
         except Exception as e:
             error(f"Failed to create agent '{name}' for team '{team}': {e}")
             return None
@@ -457,6 +491,14 @@ class AgentEngine:
             debug(f"Agent '{agent_name}' is already dead")
             return False
 
+        # --- Remove agent label from visualization (if vis_engine available) ---
+        if self.vis_engine is not None:
+            try:
+                self.vis_engine.remove_agent_label(agent_name)
+                debug(f"Removed label for killed agent '{agent_name}'")
+            except Exception as e:
+                warning(f"Failed to remove label for agent '{agent_name}': {e}")
+
         # --- Context cleanup (best-effort) ---
         try:
             gamms_agent = getattr(agent, "gamms_agent", None)
@@ -549,7 +591,7 @@ class AgentEngine:
         if agent is None or not agent.is_alive():
             warning(f"Cannot move agent '{agent_name}' - agent not found or dead")
             return False
-        
+
         agent.update_position(target_node)
         return True
 
@@ -651,25 +693,25 @@ class AgentEngine:
     def validate_agent_exists(self, agent_name: str) -> bool:
         """
         Validate that an agent exists in both the context and engine storage.
-        
+
         Args:
             agent_name: Name of the agent to validate
-            
+
         Returns:
             True if agent exists in both systems, False otherwise
         """
         # Check if agent exists in engine storage
         engine_agent = self.agents.get(agent_name)
-        
+
         # Check if agent exists in context
         ctx_agent = None
         try:
-            if hasattr(self.ctx, 'agent') and hasattr(self.ctx.agent, 'get_agent'):
+            if hasattr(self.ctx, "agent") and hasattr(self.ctx.agent, "get_agent"):
                 ctx_agent = self.ctx.agent.get_agent(agent_name)
         except Exception as e:
             warning(f"Error accessing context agent '{agent_name}': {e}")
             ctx_agent = None
-        
+
         # Validate synchronization
         if ctx_agent is None and engine_agent is not None:
             error(f"Agent '{agent_name}' exists in engine but not in context - synchronization issue")
@@ -681,16 +723,16 @@ class AgentEngine:
             # This might be expected behavior when checking non-existent agents
             debug(f"Agent '{agent_name}' does not exist in either system")
             return False
-        
+
         return True
 
     def get_validated_agent(self, agent_name: str) -> Optional[AgentController]:
         """
         Get an agent only if it exists in both context and engine systems.
-        
+
         Args:
             agent_name: Name of the agent to retrieve
-            
+
         Returns:
             AgentController if validation passes, None otherwise
         """
@@ -699,10 +741,10 @@ class AgentEngine:
         if engine_agent is None:
             debug(f"Agent '{agent_name}' not found in engine storage")
             return None
-        
+
         # Check if agent exists in context
         try:
-            if hasattr(self.ctx, 'agent') and hasattr(self.ctx.agent, 'get_agent'):
+            if hasattr(self.ctx, "agent") and hasattr(self.ctx.agent, "get_agent"):
                 ctx_agent = self.ctx.agent.get_agent(agent_name)
                 if ctx_agent is None:
                     error(f"Agent '{agent_name}' exists in engine but not in context - synchronization issue")
@@ -713,38 +755,37 @@ class AgentEngine:
         except Exception as e:
             warning(f"Error accessing context agent '{agent_name}': {e}")
             return None
-        
+
         return engine_agent
 
     def validate_all_agents(self) -> Dict[str, bool]:
         """
         Validate all agents in the engine for synchronization issues.
-        
+
         Returns:
             Dictionary mapping agent names to their validation status
         """
         debug("Validating all agents for synchronization")
         validation_results = {}
-        
+
         # Check all agents in engine storage
         for agent_name in self.agents.keys():
             validation_results[agent_name] = self.validate_agent_exists(agent_name)
-        
+
         # Check for orphaned agents in context (exist in context but not engine)
         try:
-            if hasattr(self.ctx, 'agent'):
+            if hasattr(self.ctx, "agent"):
                 for ctx_agent in self.ctx.agent.create_iter():
-                    agent_name = getattr(ctx_agent, 'name', None)
+                    agent_name = getattr(ctx_agent, "name", None)
                     if agent_name and agent_name not in self.agents:
                         validation_results[agent_name] = False
                         error(f"Orphaned agent '{agent_name}' found in context but not in engine")
         except Exception as e:
             warning(f"Could not iterate context agents for validation: {e}")
-        
+
         valid_count = sum(1 for valid in validation_results.values() if valid)
         info(f"Agent validation complete: {valid_count}/{len(validation_results)} agents valid")
         return validation_results
-
 
 
 # Usage example:

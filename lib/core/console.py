@@ -122,6 +122,23 @@ def debug(text: str) -> None:
     filename = os.path.basename(frame.f_code.co_filename)
     current_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     print(f"[{current_time}][{filename}::{caller}] \033[36m⚙︎ Debug: {text}\033[0m")
+    
+@typechecked
+def test(text: any) -> None:
+    """
+    Print a test message with timestamp and caller info in magenta.
+
+    Parameters:
+        text (any): The test message to display.
+    """
+    if not _should_log(LogLevel.WARNING):
+        return
+    text = str(text)
+    frame = inspect.currentframe().f_back
+    caller = frame.f_code.co_name
+    filename = os.path.basename(frame.f_code.co_filename)
+    current_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[{current_time}][{filename}::{caller}] \033[36m★ Test: {text}\033[0m")
 
 
 @contextmanager

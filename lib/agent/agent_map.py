@@ -679,6 +679,41 @@ class AgentMap:
         else:
             return len(self.flags.get(team_name, {}))
 
+    def shortest_path_step(self, source: int, target: int, speed: int) -> int:
+        """
+        Calculate the next node in the shortest path from source to target given a speed.
+
+        Parameters:
+            source (int): Starting node ID.
+            target (int): Target node ID.
+            speed (int): Maximum number of edges that can be traversed in one step.
+        Returns:
+            int: The next node ID to move to, or source if no path exists or already at target.
+        """
+        if self.graph is None:
+            warning("No graph attached to AgentMap for shortest_path_step calculation")
+            return source
+            
+        if source == target:
+            debug(f"Source {source} is the same as target {target}, no movement needed")
+            return source
+            
+        try:
+            path = nx.shortest_path(self.graph, source=source, target=target)
+            debug(f"Shortest path from {source} to {target}: {path}")
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            warning(f"No path found from {source} to {target}: {e}")
+            return source  # No path exists or nodes not found
+            
+        if len(path) <= 1:
+            debug(f"Already at target {target}, no movement needed")
+            return source  # Already at target
+            
+        # Move along the path up to 'speed' steps
+        next_index = min(speed, len(path) - 1)
+        next_node = path[next_index]
+        debug(f"Next node on path from {source} to {target} with speed {speed} is {next_node}")
+        return next_node
 
     def __str__(self) -> str:
         """
