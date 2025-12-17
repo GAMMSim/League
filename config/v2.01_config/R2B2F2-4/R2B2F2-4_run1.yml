@@ -14,7 +14,7 @@ agents:
   red_global:
     speed: 1
     capture_radius: 2
-    sensing_radius: 600
+    sensing_radius: 400
     sensors:
     - global_map
     - candidate_flag
@@ -24,7 +24,7 @@ agents:
   blue_global:
     speed: 1
     tagging_radius: 1
-    sensing_radius: 450
+    sensing_radius: 250
     sensors:
     - global_map
     - custom_team
@@ -34,78 +34,48 @@ agents:
     - stationary
   red_config:
     red_0:
-      start_node_id: 144
+      start_node_id: 47
     red_1:
-      start_node_id: 3
-    red_2:
-      start_node_id: 157
-    red_3:
-      start_node_id: 75
-    red_4:
-      start_node_id: 12
-    red_5:
-      start_node_id: 17
-    red_6:
-      start_node_id: 7
-    red_7:
-      start_node_id: 0
-    red_8:
-      start_node_id: 63
-    red_9:
-      start_node_id: 83
+      start_node_id: 164
   blue_config:
     blue_0:
-      start_node_id: 7
-    blue_1:
-      start_node_id: 0
-    blue_2:
-      start_node_id: 17
-    blue_3:
-      start_node_id: 71
-    blue_4:
       start_node_id: 5
-    blue_5:
-      start_node_id: 35
-    blue_6:
-      start_node_id: 18
-    blue_7:
-      start_node_id: 16
-    blue_8:
-      start_node_id: 4
-    blue_9:
-      start_node_id: 2
+    blue_1:
+      start_node_id: 6
 flags:
   real_positions:
-  - 1
-  - 0
   - 2
+  - 4
   candidate_positions: &id001
-  - 1
-  - 0
   - 2
-  - 3
+  - 4
   - 6
+  - 3
 environment:
   graph_name: graph_200_200_a.pkl
-  blue_stationary_sensor_radius: 800
+  blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
 generator:
-  id: aa55e91a71
-  ts: '2025-09-20 23:41:08'
+  id: b20619f2d2
+  ts: '2025-11-20 11:36:05'
   cafl:
   - 1
-  - 5
-  - uniform
+  - 4
+  - normal_t
   - 2
+  - 1
+  - 1.0
   reag:
   - 1
-  - 10
-  - normal
-  - 6
   - 2
+  - normal_t
+  - 10
+  - 2
+  - 1
   blag:
   - 1
-  - 10
-  - normal
-  - 4
   - 2
+  - normal_t
+  - 3
+  - 1
+  - 1

@@ -1,5 +1,5 @@
 game:
-  game_rule: "v1.2"
+  game_rule: v1.2
   max_time: 200
   interaction_model:
     tagging: both_kill
@@ -10,8 +10,6 @@ game:
     capture_constant: 1.0
     tagging_constant: 0.5
     detection_constant: 0.1
-  
-
 agents:
   red_global:
     speed: 1
@@ -34,14 +32,54 @@ agents:
     - egocentric_map
     - flag
     - stationary
-  red_config: {}
-  blue_config: {}
-
+  red_config:
+    red_0:
+      start_node_id: 80
+    red_1:
+      start_node_id: 174
+  blue_config:
+    blue_0:
+      start_node_id: 3
+    blue_1:
+      start_node_id: 5
+    blue_2:
+      start_node_id: 4
 flags:
-  real_positions: null
-  candidate_positions: null
+  real_positions:
+  - 6
+  - 2
+  - 4
+  candidate_positions: &id001
+  - 6
+  - 2
+  - 4
+  - 7
+  - 3
 environment:
-  graph_name: null
+  graph_name: graph_200_200_a.pkl
   blue_stationary_sensor_radius: 450
-  blue_static_sensor_positions: null
-generator: {}
+  blue_static_sensor_positions: *id001
+generator:
+  id: 04e8460022
+  ts: '2025-11-20 11:36:23'
+  cafl:
+  - 1
+  - 5
+  - normal_t
+  - 2
+  - 1
+  - 1.0
+  reag:
+  - 1
+  - 2
+  - normal_t
+  - 10
+  - 2
+  - 1
+  blag:
+  - 1
+  - 3
+  - normal_t
+  - 3
+  - 1
+  - 1

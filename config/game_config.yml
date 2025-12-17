@@ -3,7 +3,7 @@
 
 visualization:
   window_size: [3008, 1692]         # Window width and height in pixels
-  game_speed: 2                     # Speed multiplier for game visualization
+  game_speed: 1                     # Speed multiplier for game visualization
   draw_node_id: false               # Whether to display node IDs on visualization
   visualization_engine: "PYGAME"   # Visualization backend to use
   sizes:

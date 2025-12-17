@@ -37,6 +37,7 @@ def strategy(state):
     agent_map = agent_ctrl.map
     global_map_sensor: nx.Graph = state["sensor"]["global_map"][1]["graph"]
 
+    # ------- #
     nodes_data: Dict[int, Dict[str, Any]] = {node_id: global_map_sensor.nodes[node_id] for node_id in global_map_sensor.nodes()}
 
     edges_data: Dict[int, Dict[str, Any]] = {}
@@ -44,6 +45,8 @@ def strategy(state):
         edges_data[idx] = {"source": u, "target": v, **data}
 
     agent_map.attach_networkx_graph(nodes_data, edges_data)
+    # ------- #
+    
     agent_map.update_time(current_time)
     agent_map.update_agent_position(team, agent_ctrl.name, current_pos, current_time)
 
@@ -90,6 +93,8 @@ def strategy(state):
             detected_agents: Dict[str, Dict[str, Any]] = sensor_data["detected_agents"]  # {agent_name: {node_id, distance}}
             agent_count: int = sensor_data["agent_count"]  # Number detected
             stationary_detections.append({"position": fixed_pos, "detected": detected_agents, "count": agent_count})
+            
+    print(stationary_detections)  # For debugging
 
     # ===== DECISION LOGIC =====
     target: int = current_pos
