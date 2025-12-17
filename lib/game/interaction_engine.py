@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Tuple, Set
 from typeguard import typechecked
 import networkx as nx
 
-from lib.core.console import info, warning, error, debug
+from lib.core.console import info, warning, error, debug, success
 from lib.game.agent_engine import AgentEngine
 
 
@@ -74,22 +74,17 @@ class InteractionEngine:
         red_flags, blue_flags = self._get_flags()
         red_captures = 0
         blue_captures = 0
-
         # red captures blue flags
         if blue_flags is not None:
             for r in self._iter_team("red"):
                 got, captured = self._try_capture(r, blue_flags, "red", "blue", time)
                 red_captures += got
-                if captured:
-                    break
 
         # blue captures red flags
         if red_flags is not None:
             for b in self._iter_team("blue"):
                 got, captured = self._try_capture(b, red_flags, "blue", "red", time)
                 blue_captures += got
-                if captured:
-                    break
 
         debug(f"Flag captures complete: {red_captures} red, {blue_captures} blue")
         return red_captures, blue_captures
@@ -97,6 +92,8 @@ class InteractionEngine:
     def _try_capture(self, agent: Any, opponent_flags: List[Any], agent_team: str, flag_team: str, time: int) -> Tuple[int, bool]:
         """Attempt to capture any opponent flag; return (captures, did_capture_any)."""
         debug(f"Checking capture attempts for {agent_team} agent {agent.name}")
+        capture_count = 0
+        captured_any = False
         for flag_node in opponent_flags:
             try:
                 dist = nx.shortest_path_length(self.G, agent.current_node_id, flag_node)
@@ -112,8 +109,10 @@ class InteractionEngine:
                 info(f"{agent_team.title()} {agent.name} captured {flag_team} flag {flag_node} at t={time}")
                 if self._handle_interaction(agent, self._capture_action()):
                     self._capture_details.append((agent.name, agent_team, flag_node))
-                    return 1, True
-        return 0, False
+                    success(f"{agent_team.title()} {agent.name} successfully captured {flag_team} flag {flag_node}")
+                    capture_count += 1
+                    captured_any = True
+        return capture_count, captured_any
 
     # ---------------------------- Combat resolution -------------------------
 
@@ -157,7 +156,7 @@ class InteractionEngine:
                 return False
             rr = getattr(r_ctrl, "tagging_radius", 0)
             br = getattr(b_ctrl, "tagging_radius", 0)
-            rng = min(rr, br)
+            rng = max(rr, br)
             dist = nx.shortest_path_length(self.G, r.current_node_id, b.current_node_id)
             return dist <= rng
         except (nx.NetworkXNoPath, nx.NodeNotFound):
@@ -181,6 +180,7 @@ class InteractionEngine:
         if action == "both_kill":
             red_dead = self._handle_interaction(r, "kill")
             blue_dead = self._handle_interaction(b, "kill")
+            success(f"Both {r.name} and {b.name} killed in combat")
             if red_dead: self._red_killed += 1
             if blue_dead: self._blue_killed += 1
             return "both_killed"

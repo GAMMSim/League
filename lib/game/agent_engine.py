@@ -581,7 +581,7 @@ class AgentEngine:
         # Decrement team counter (clamp at 0)
         self.team_counts[agent.team] = max(0, self.team_counts.get(agent.team, 0) - 1)
 
-        success(f"Agent '{agent_name}' killed and cleaned up (team '{agent.team}').")
+        info(f"Agent '{agent_name}' killed and cleaned up (team '{agent.team}').")
         return True
 
     def move_agent(self, agent_name: str, target_node: int) -> bool:

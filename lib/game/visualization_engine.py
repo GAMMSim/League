@@ -44,6 +44,10 @@ class VisEngine:
         
         # Agent name label tracking
         self.agent_labels_created = set()
+        
+        # --- ADD THIS LINE ---
+        # This will store the actual artist objects, mapped by agent name
+        self.agent_label_artists: Dict[str, Any] = {}
 
         # Initialize visualization
         self._setup_base_visualization()
@@ -347,7 +351,11 @@ class VisEngine:
                     "color": color,
                     "size": size
                 })
-                self.ctx.visual.add_artist(label_id, artist)
+                
+                # --- MODIFY THIS SECTION ---
+                # Capture the returned artist and store it
+                returned_artist = self.ctx.visual.add_artist(label_id, artist)
+                self.agent_label_artists[agent_name] = returned_artist
                 
             except (ImportError, AttributeError):
                 # Fallback to dictionary API
@@ -360,9 +368,13 @@ class VisEngine:
                     "layer": 30,
                     "drawer": self._render_agent_label
                 }
-                self.ctx.visual.add_artist(label_id, data)
                 
-            debug(f"Created label for agent '{agent_name}' at ({x}, {y + offset_y})")
+                # --- MODIFY THIS SECTION ---
+                # Capture the returned artist and store it
+                returned_artist = self.ctx.visual.add_artist(label_id, data)
+                self.agent_label_artists[agent_name] = returned_artist
+                
+            debug(f"Created and stored label for agent '{agent_name}' at ({x}, {y + offset_y})")
             
         except Exception as e:
             warning(f"Failed to create label artist for agent '{agent_name}': {e}")
@@ -389,49 +401,47 @@ class VisEngine:
     def update_agent_label(self, agent_name: str) -> None:
         """
         Update the position of an agent's name label to match their current location.
-
-        Args:
-            agent_name: Name of the agent whose label to update
         """
         if agent_name not in self.agent_labels_created:
             return
             
         try:
-            # Get agent's current position
+            # --- STEP 1: Get the live agent from ctx ---
+            # (Based on your last code, this is how you get the agent)
             agent = self.ctx.agent.get_agent(agent_name)
-            if not agent or not hasattr(agent, 'curr_node_id'):
-                return
-                
-            node = self.ctx.graph.graph.get_node(agent.curr_node_id)
-            if not node:
-                return
-                
-            # Update label position
-            label_id = f"{agent_name}_label"
-            label_offset_y = self.vis_config.get("agent_label_offset_y", -25)
             
-            # Try to update existing artist
-            try:
-                if hasattr(self.ctx.visual, "get_artist"):
-                    artist = self.ctx.visual.get_artist(label_id)
-                    if artist:
-                        artist.data["x"] = node.x
-                        artist.data["y"] = node.y + label_offset_y
-                        debug(f"Updated label position for agent '{agent_name}' to ({node.x}, {node.y + label_offset_y})")
-                        
-            except Exception:
-                # Fallback: recreate the label
-                self.remove_agent_label(agent_name)
-                
-                # Get agent config for color
-                label_color = (0, 0, 0)  # Default black
-                label_size = self.vis_config.get("agent_label_size", 12)
-                
-                self._create_agent_label(agent_name, node.x, node.y, label_color, label_size, label_offset_y)
+            # --- ⬇️ IMPORTANT ⬇️ ---
+            # This assumes 'current_node_id' is the correct, live attribute.
+            # If your inspection revealed a different name, use that instead.
+            if not agent or not hasattr(agent, 'current_node_id'): 
+                warning(f"Label update: Agent '{agent_name}' not found or has no 'current_node_id'")
+                return
+            node_id = agent.current_node_id
+            # --- ⬆️ IMPORTANT ⬆️ ---
+
+            node = self.ctx.graph.graph.get_node(node_id)
+            if not node:
+                warning(f"Label update: Node '{node_id}' not found for agent '{agent_name}'")
+                return
+            
+            # Calculate new position
+            new_x = node.x
+            new_y = node.y + self.vis_config.get("agent_label_offset_y", -25)
+
+            # --- STEP 2: Get the artist from our local storage ---
+            artist = self.agent_label_artists.get(agent_name)
+            
+            if artist:
+                # --- STEP 3: Update the artist's data directly ---
+                # No get_artist() needed! This is the fix.
+                artist.data["x"] = new_x
+                artist.data["y"] = new_y
+            else:
+                warning(f"Artist for '{agent_name}' NOT found in local storage. Cannot update.")
                 
         except Exception as e:
             warning(f"Failed to update label for agent '{agent_name}': {e}")
-
+            
     def update_all_agent_labels(self) -> None:
         """Update positions of all agent name labels."""
         try:
@@ -473,6 +483,11 @@ class VisEngine:
                     debug(f"Removed label for agent '{agent_name}'")
                 except Exception:
                     pass
+            
+            # --- ADD THIS ---
+            # Also remove it from our local reference dictionary
+            if agent_name in self.agent_label_artists:
+                del self.agent_label_artists[agent_name]
                     
             self.agent_labels_created.discard(agent_name)
             
@@ -527,6 +542,7 @@ class VisEngine:
         """Update the visual display (handle pygame events, render frame)."""
         try:
             debug("Updating display")
+            self.update_all_agent_labels()
             self.ctx.visual.simulate()
         except Exception as e:
             warning(f"Display update failed: {e}")

@@ -100,7 +100,7 @@ class AgentMap:
             self.graph.add_edge(source, target, **edge_attrs)
             edges_added += 1
             
-        success(f"Graph attached successfully: {nodes_added} nodes, {edges_added} edges added")
+        info(f"Graph attached successfully: {nodes_added} nodes, {edges_added} edges added")
         if edges_skipped > 0:
             warning(f"{edges_skipped} edges were skipped due to invalid endpoints")
 

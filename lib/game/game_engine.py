@@ -374,7 +374,7 @@ class GameEngine:
         blue_kill_penalty = constants["blue_killed"]
 
         if model == "zero_sum" or model == "zero_sum_reward":
-            red_payoff = red_capture_reward * red_captures - blue_capture_reward * blue_captures - red_kill_penalty * red_killed + blue_kill_penalty * blue_killed
+            red_payoff = red_capture_reward * red_captures - red_kill_penalty * red_killed
             real_flags = set(self.flag_config.get("real_positions", []))
             self.discovered_flags.intersection_update(set(real_flags))
             if len(self.discovered_flags) > self.discovered_flags_count:
