@@ -123,6 +123,14 @@ def generate_position_with_distribution(graph: nx.Graph, num_nodes: int, dist_ty
 
     if dist_type == "uniform":
         positions = distribute_uniform_random(graph, center_node, num_nodes, max_distance=param)
+    elif dist_type == "normal_t":
+        try:
+            mean_d, std, trunc = param
+        except Exception as e:
+            error(f"Invalid parameter for normal_t distribution: {param}. Error: {e}")
+            return None, center_node
+        positions = distribute_normal_truncated(graph, center_node, num_nodes, mean_distance=mean_d, std_dev=std, n_std_cutoff=trunc)
+        print(positions)
     elif dist_type == "normal":
         try:
             mean_d, std = param

@@ -68,6 +68,82 @@ def distribute_uniform_random(G: nx.Graph, center_node: int, num_nodes: int, max
     return random.sample(eligible_nodes, num_nodes)
 
 
+def distribute_normal_truncated(G: nx.Graph, center_node: int, num_nodes: int, mean_distance: float = 1, std_dev: float = 0.5, n_std_cutoff: float = 2.0) -> list:  # <-- New parameter
+    """
+    Selects nodes following a normal distribution, truncated to a number of
+    standard deviations, and uses accurate node-based sampling.
+
+    Parameters:
+    -----------
+    G : nx.Graph
+        The input graph
+    center_node : int
+        The center node
+    num_nodes : int
+        Number of nodes to select
+    mean_distance : float
+        Mean distance from center node
+    std_dev : float
+        Standard deviation of the distance
+    n_std_cutoff : float
+        Number of standard deviations from the mean to use as a cutoff.
+        If None, the distribution is not truncated. (e.g., 2.0 = 2-sigma)
+
+    Returns:
+    --------
+    list
+        Selected nodes
+    """
+    nodes_by_distance = get_nodes_by_distance(G, center_node)
+    if not nodes_by_distance:
+        return []
+
+    # --- 1. Determine Truncation Bounds (Answers your question) ---
+    min_bound = 0
+    max_bound = max(nodes_by_distance.keys())
+
+    if n_std_cutoff is not None and std_dev > 0:
+        # Calculate bounds and clamp them to valid distances
+        min_bound = max(0, int(np.floor(mean_distance - (n_std_cutoff * std_dev))))
+        max_bound = min(max_bound, int(np.ceil(mean_distance + (n_std_cutoff * std_dev))))
+
+    # --- 2. Calculate Weights for each *Node* (Improved Sampling) ---
+    eligible_nodes = []
+    weights = []
+
+    for dist in range(min_bound, max_bound + 1):
+        if dist in nodes_by_distance:
+            # Normal PDF centered at mean_distance
+            weight = np.exp(-0.5 * ((dist - mean_distance) / std_dev) ** 2)
+
+            # Add each node at this distance with the calculated weight
+            nodes_at_dist = nodes_by_distance[dist]
+            if weight > 0 and len(nodes_at_dist) > 0:
+                eligible_nodes.extend(nodes_at_dist)
+                # Each node at this distance gets the same weight
+                weights.extend([weight] * len(nodes_at_dist))
+
+    if not eligible_nodes:
+        # Fallback if no nodes are within the (truncated) range
+        return distribute_uniform_random(G, center_node, num_nodes, max_distance=max_bound)
+
+    # --- 3. Sample from Nodes Without Replacement ---
+
+    # Normalize weights
+    total_weight = sum(weights)
+    if total_weight == 0:
+        # Fallback to uniform if all weights are somehow zero
+        return distribute_uniform_random(G, center_node, num_nodes, max_distance=max_bound)
+
+    probs = np.array(weights) / total_weight
+
+    # Sample 'num_nodes' without replacement, weighted by probability
+    # This is more accurate than your original method
+    selected_nodes = np.random.choice(eligible_nodes, size=min(num_nodes, len(eligible_nodes)), replace=False, p=probs)
+
+    return [int(node) for node in selected_nodes]
+
+
 def distribute_normal(G: nx.Graph, center_node: int, num_nodes: int, mean_distance: float = 1, std_dev: float = 0.5) -> list:
     """
     Selects nodes following a normal distribution based on distance from center.

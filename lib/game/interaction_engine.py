@@ -1,8 +1,9 @@
-from typing import Any, Dict, List, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple, Set
 from typeguard import typechecked
 import networkx as nx
 
 from lib.core.console import info, warning, error, debug, success
+from lib.core.apsp_cache import get_apsp_length_cache, get_cached_distance
 from lib.game.agent_engine import AgentEngine
 
 
@@ -16,14 +17,18 @@ class InteractionEngine:
     - Order: capture-first or combat-first (read from config, safe fallbacks)
     """
 
-    def __init__(self, agent_engine: AgentEngine, G: nx.Graph, config: Dict[str, Any]) -> None:
+    def __init__(self, agent_engine: AgentEngine, G: nx.Graph, config: Dict[str, Any],
+                 discovered_flags: Optional[Set[int]] = None) -> None:
         debug("Initializing InteractionEngine")
         warning("Current interaction engine only acceptps red-vs-blue CTF-style games.")
-        
+
         self.engine = agent_engine
         self.ctx = agent_engine.ctx
         self.G = G
         self.config = config
+        self._distance_lookup = get_apsp_length_cache(self.G)
+        # Reference to cumulative discovered flags (owned by GameEngine)
+        self._discovered_flags: Set[int] = discovered_flags if discovered_flags is not None else set()
 
         # per-step scratch
         self._processed: Set[str] = set()
@@ -35,7 +40,7 @@ class InteractionEngine:
 
     # ------------------------------ Public API ------------------------------
 
-    def step(self, time: int) -> Tuple[int, int, int, int, int, int, List[Tuple[str, str, Any]], List[Tuple[str, str, str]]]:
+    def step(self, time: int) -> Tuple[int, int, int, int, int, int, List[Tuple[str, str, Any]], List[Tuple[str, str, str]], Set[int]]:
         """
         Resolve one timestep of interactions.
 
@@ -43,7 +48,8 @@ class InteractionEngine:
             (red_captures, blue_captures,
              red_killed, blue_killed,
              remaining_red, remaining_blue,
-             capture_details, tagging_details)
+             capture_details, tagging_details,
+             discovered_flags)
         """
         debug(f"Processing interactions for timestep {time}")
         self._processed.clear()
@@ -51,6 +57,9 @@ class InteractionEngine:
         self._blue_killed = 0
         self._capture_details.clear()
         self._tagging_details.clear()
+
+        # Discovery must run before capture so flags must be sensed before they can be captured
+        discovered = self._process_flag_discoveries()
 
         order = self._prioritize_mode()
         debug(f"Interaction order: {order}")
@@ -65,7 +74,7 @@ class InteractionEngine:
         remaining_blue = sum(1 for a in self.ctx.agent.create_iter() if getattr(a, "team", "") == "blue")
 
         debug(f"Timestep {time} complete: {red_caps} red captures, {blue_caps} blue captures, {self._red_killed} red killed, {self._blue_killed} blue killed")
-        return (red_caps, blue_caps, self._red_killed, self._blue_killed, remaining_red, remaining_blue, self._capture_details, self._tagging_details)
+        return (red_caps, blue_caps, self._red_killed, self._blue_killed, remaining_red, remaining_blue, self._capture_details, self._tagging_details, discovered)
 
     # --------------------------- Capture resolution --------------------------
 
@@ -77,42 +86,83 @@ class InteractionEngine:
         # red captures blue flags
         if blue_flags is not None:
             for r in self._iter_team("red"):
-                got, captured = self._try_capture(r, blue_flags, "red", "blue", time)
+                got = self._try_capture(r, blue_flags, "red", "blue", time)
                 red_captures += got
 
         # blue captures red flags
         if red_flags is not None:
             for b in self._iter_team("blue"):
-                got, captured = self._try_capture(b, red_flags, "blue", "red", time)
+                got = self._try_capture(b, red_flags, "blue", "red", time)
                 blue_captures += got
 
         debug(f"Flag captures complete: {red_captures} red, {blue_captures} blue")
         return red_captures, blue_captures
 
-    def _try_capture(self, agent: Any, opponent_flags: List[Any], agent_team: str, flag_team: str, time: int) -> Tuple[int, bool]:
-        """Attempt to capture any opponent flag; return (captures, did_capture_any)."""
+    def _try_capture(self, agent: Any, opponent_flags: List[Any], agent_team: str, flag_team: str, time: int) -> int:
+        """Attempt to capture all opponent flags in range; return number of captures."""
         debug(f"Checking capture attempts for {agent_team} agent {agent.name}")
-        capture_count = 0
-        captured_any = False
+        captures = 0
         for flag_node in opponent_flags:
-            try:
-                dist = nx.shortest_path_length(self.G, agent.current_node_id, flag_node)
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
+            # Agent might have been processed (e.g., killed) by an earlier capture this step.
+            if agent.name in self._processed:
+                break
+
+            ctrl = self.engine.get_active_agent(agent.name)
+            if not ctrl:
+                debug(f"Skipping capture for inactive agent '{agent.name}'")
+                break
+
+            # Flag must have been discovered before it can be captured
+            if flag_node not in self._discovered_flags:
+                debug(f"Skipping capture: flag {flag_node} not yet discovered by {agent_team}")
                 continue
 
-            ctrl = self.engine.get_validated_agent(agent.name)
-            if not ctrl:
-                warning(f"Agent '{agent.name}' failed validation during capture attempt")
+            dist = get_cached_distance(self._distance_lookup, agent.current_node_id, flag_node)
+            if dist is None:
                 continue
+
             cr = getattr(ctrl, "capture_radius", 0)
             if dist <= cr:
                 info(f"{agent_team.title()} {agent.name} captured {flag_team} flag {flag_node} at t={time}")
-                if self._handle_interaction(agent, self._capture_action()):
+                if self._handle_interaction(agent, self._capture_action(), "capture"):
                     self._capture_details.append((agent.name, agent_team, flag_node))
                     success(f"{agent_team.title()} {agent.name} successfully captured {flag_team} flag {flag_node}")
-                    capture_count += 1
-                    captured_any = True
-        return capture_count, captured_any
+                    captures += 1
+        return captures
+
+    # --------------------------- Discovery resolution -------------------------
+
+    def _process_flag_discoveries(self) -> Set[int]:
+        """Auto-detect flags within each red agent's sensing_radius (Euclidean)."""
+        _, blue_flags = self._get_flags()
+        if not blue_flags:
+            return set()
+
+        discovered: Set[int] = set()
+        for agent in self._iter_team("red"):
+            ctrl = self.engine.get_validated_agent(agent.name)
+            if not ctrl:
+                continue
+            sr = getattr(ctrl, "sensing_radius", 0)
+            if sr <= 0:
+                continue
+            agent_node = self.ctx.graph.graph.get_node(agent.current_node_id)
+            for flag_node_id in blue_flags:
+                # Skip flags that were already discovered in prior steps or earlier this step.
+                if flag_node_id in self._discovered_flags or flag_node_id in discovered:
+                    continue
+                flag_node = self.ctx.graph.graph.get_node(flag_node_id)
+                dx = flag_node.x - agent_node.x
+                dy = flag_node.y - agent_node.y
+                dist = (dx ** 2 + dy ** 2) ** 0.5
+                debug(f"[Discovery] {agent.name} -> flag {flag_node_id}: dist={dist:.1f}, sensing_radius={sr}")
+                if dist <= sr:
+                    info(f"[Discovery] {agent.name} discovered flag {flag_node_id} (dist={dist:.1f} <= sr={sr})")
+                    discovered.add(flag_node_id)
+        if discovered:
+            success(f"[Discovery] Flags discovered this step: {discovered}")
+            self._discovered_flags.update(discovered)
+        return discovered
 
     # ---------------------------- Combat resolution -------------------------
 
@@ -145,22 +195,21 @@ class InteractionEngine:
 
     def _agents_in_tagging_range(self, r: Any, b: Any) -> bool:
         """Check if red r and blue b are within tagging range (min of radii)."""
-        try:
-            if r.name in self._processed or b.name in self._processed:
-                return False
-            
-            r_ctrl = self.engine.get_validated_agent(r.name)
-            b_ctrl = self.engine.get_validated_agent(b.name)
-            
-            if not r_ctrl or not b_ctrl:
-                return False
-            rr = getattr(r_ctrl, "tagging_radius", 0)
-            br = getattr(b_ctrl, "tagging_radius", 0)
-            rng = max(rr, br)
-            dist = nx.shortest_path_length(self.G, r.current_node_id, b.current_node_id)
-            return dist <= rng
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
+        if r.name in self._processed or b.name in self._processed:
             return False
+
+        r_ctrl = self.engine.get_validated_agent(r.name)
+        b_ctrl = self.engine.get_validated_agent(b.name)
+
+        if not r_ctrl or not b_ctrl:
+            return False
+        rr = getattr(r_ctrl, "tagging_radius", 0)
+        br = getattr(b_ctrl, "tagging_radius", 0)
+        rng = max(rr, br)
+        dist = get_cached_distance(self._distance_lookup, r.current_node_id, b.current_node_id)
+        if dist is None:
+            return False
+        return dist <= rng
 
     def _resolve_original_combat(self, r: Any, b: Any) -> str:
         """
@@ -178,21 +227,21 @@ class InteractionEngine:
             return self._resolve_probabilistic(r, b, action)
 
         if action == "both_kill":
-            red_dead = self._handle_interaction(r, "kill")
-            blue_dead = self._handle_interaction(b, "kill")
+            red_dead = self._handle_interaction(r, "kill", "tagging")
+            blue_dead = self._handle_interaction(b, "kill", "tagging")
             success(f"Both {r.name} and {b.name} killed in combat")
             if red_dead: self._red_killed += 1
             if blue_dead: self._blue_killed += 1
             return "both_killed"
 
         if action == "both_respawn":
-            self._handle_interaction(r, "respawn")
-            self._handle_interaction(b, "respawn")
+            self._handle_interaction(r, "respawn", "tagging")
+            self._handle_interaction(b, "respawn", "tagging")
             return "both_respawned"
 
         # Single action applied to both (e.g., "kill", "respawn", or custom)
-        red_success = self._handle_interaction(r, action)
-        blue_success = self._handle_interaction(b, action)
+        red_success = self._handle_interaction(r, action, "tagging")
+        blue_success = self._handle_interaction(b, action, "tagging")
         if action == "kill":
             self._red_killed += 1 if red_success else 0
             self._blue_killed += 1 if blue_success else 0
@@ -208,17 +257,17 @@ class InteractionEngine:
         u = random.random()
 
         if u < p[2]:  # both die
-            red_dead = self._handle_interaction(r, "kill")
-            blue_dead = self._handle_interaction(b, "kill")
+            red_dead = self._handle_interaction(r, "kill", "probabilistic_tagging")
+            blue_dead = self._handle_interaction(b, "kill", "probabilistic_tagging")
             self._red_killed += 1 if red_dead else 0
             self._blue_killed += 1 if blue_dead else 0
             return "both_killed"
         elif u < p[2] + p[0]:  # red dies
-            red_dead = self._handle_interaction(r, "kill")
+            red_dead = self._handle_interaction(r, "kill", "probabilistic_tagging")
             self._red_killed += 1 if red_dead else 0
             return "red_killed"
         elif u < p[2] + p[0] + p[1]:  # blue dies
-            blue_dead = self._handle_interaction(b, "kill")
+            blue_dead = self._handle_interaction(b, "kill", "probabilistic_tagging")
             self._blue_killed += 1 if blue_dead else 0
             return "blue_killed"
         else:
@@ -232,17 +281,17 @@ class InteractionEngine:
                 # Need to get the gamms agent from the controller
                 yield ctrl.gamms_agent
 
-    def _handle_interaction(self, agent: Any, action: str) -> bool:
+    def _handle_interaction(self, agent: Any, action: str, reason: str) -> bool:
         """
         Apply an action to an agent and mark it processed.
         Supported actions: "kill", "respawn", or any custom no-op string.
         """
-        debug(f"Handling interaction: {action} for agent {agent.name}")
+        debug(f"Handling interaction: {action} for agent {agent.name} (reason: {reason})")
         self._processed.add(agent.name)
 
         if action == "kill":
             # Delegate to AgentEngine.kill_agent so it handles ctx cleanup + engine state
-            ok = bool(self.engine.kill_agent(agent.name))
+            ok = bool(self.engine.kill_agent(agent.name, death_type=reason))
             if ok:
                 debug(f"Agent '{agent.name}' killed via AgentEngine.kill_agent()")
             else:

@@ -13,6 +13,11 @@ from lib.sensor.stationary_sensor import create_stationary_sensor_class
 from lib.sensor.team_sensor import create_team_agent_sensor
 
 
+# Process-global cache to avoid re-registering identical custom sensor types
+# on every new game context in the same Python process.
+_CUSTOM_SENSOR_CLASS_CACHE: Dict[str, Any] = {}
+
+
 @typechecked
 class SensorEngine:
     """Manages sensor creation and registration for agents"""
@@ -44,15 +49,35 @@ class SensorEngine:
     def _register_custom_sensor_classes(self) -> None:
         """Register all custom sensor factory classes with ctx"""
         debug("Registering custom sensor classes")
-        
-        # Create sensor classes with ctx binding
+        global _CUSTOM_SENSOR_CLASS_CACHE
+
+        if _CUSTOM_SENSOR_CLASS_CACHE:
+            self.GlobalMapSensor = _CUSTOM_SENSOR_CLASS_CACHE["GlobalMapSensor"]
+            self.CandidateFlagSensor = _CUSTOM_SENSOR_CLASS_CACHE["CandidateFlagSensor"]
+            self.FlagSensor = _CUSTOM_SENSOR_CLASS_CACHE["FlagSensor"]
+            self.FlagRangeSensor = _CUSTOM_SENSOR_CLASS_CACHE["FlagRangeSensor"]
+            self.StationarySensor = _CUSTOM_SENSOR_CLASS_CACHE["StationarySensor"]
+            self.TeamAgentSensor = _CUSTOM_SENSOR_CLASS_CACHE["TeamAgentSensor"]
+            debug("Reusing cached custom sensor classes")
+            return
+
+        # First registration in this process.
         self.GlobalMapSensor = create_global_map_sensor_class(self.ctx)
         self.CandidateFlagSensor = create_candidate_flag_sensor_class(self.ctx)
         self.FlagSensor = create_flag_sensor_class(self.ctx)
         self.FlagRangeSensor = create_flag_range_sensor_class(self.ctx)
         self.StationarySensor = create_stationary_sensor_class(self.ctx)
         self.TeamAgentSensor = create_team_agent_sensor(self.ctx)
-        
+
+        _CUSTOM_SENSOR_CLASS_CACHE = {
+            "GlobalMapSensor": self.GlobalMapSensor,
+            "CandidateFlagSensor": self.CandidateFlagSensor,
+            "FlagSensor": self.FlagSensor,
+            "FlagRangeSensor": self.FlagRangeSensor,
+            "StationarySensor": self.StationarySensor,
+            "TeamAgentSensor": self.TeamAgentSensor,
+        }
+
         success("Custom sensor classes registered")
 
     def _create_shared_sensors(self) -> None:
@@ -115,7 +140,8 @@ class SensorEngine:
                     ctx=self.ctx,
                     sensor_id=f"stationary_{idx}",
                     fixed_node_id=node_id,
-                    sensor_range=stationary_radius
+                    sensor_range=stationary_radius,
+                    nx_graph=self.graph,
                 )
                 self.ctx.sensor.add_sensor(stationary_sensor)
                 self.created_sensors[f"stationary_{idx}"] = stationary_sensor

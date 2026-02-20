@@ -3,12 +3,28 @@
 
 visualization:
   window_size: [3008, 1692]         # Window width and height in pixels
-  game_speed: 1                     # Speed multiplier for game visualization
+  game_speed: 0.5                     # Speed multiplier for game visualization
   draw_node_id: false               # Whether to display node IDs on visualization
   visualization_engine: "PYGAME"   # Visualization backend to use
   sizes:
     flag_size: 18
     global_agent_size: 13
+
+  # Label settings
+  label_y_offset: -15               # Shared y offset for moving labels, dead labels, and flag-capture labels (world coords)
+  label_spacing: 30                 # Shared vertical spacing for overlapping/stacked labels (world coords)
+
+  # HUD overlay — event log and payoff breakdown rendered at fixed screen position
+  hud:
+    x: 400                          # Left edge of HUD text in screen pixels
+    # x: 700                          # Left edge of HUD text in screen pixels
+    y: 10                           # Top edge of HUD text in screen pixels
+    line_height: 18                 # Vertical spacing between HUD lines in pixels
+    font_size: 18                   # Font size for HUD text in pixels
+    max_events: 20                   # Maximum number of event lines shown before oldest are dropped
+
+  # Death marker settings — visuals placed where an agent dies
+  death_cross_size_ratio: 1.0       # Death cross size as a ratio of agent size (1.0 = same size as agent)
 
 agents:
   red_global:

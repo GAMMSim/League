@@ -50,6 +50,28 @@ def export_graph_config(config: dict, dirs: dict) -> nx.MultiDiGraph:
 
 
 @typechecked
+def _annotate_graph_source(graph: nx.MultiDiGraph, filename: str) -> None:
+    """
+    Attach source-file metadata to graph.graph so runtime caches can reuse results
+    across newly loaded graph objects from the same file.
+    """
+    try:
+        source_path = str(Path(filename).resolve())
+        stat = os.stat(source_path)
+        source_token = f"{source_path}:{stat.st_mtime_ns}:{stat.st_size}"
+    except Exception:
+        source_path = str(filename)
+        source_token = source_path
+
+    try:
+        graph.graph["__graph_source_path"] = source_path
+        graph.graph["__graph_source_token"] = source_token
+    except Exception:
+        # Non-fatal; graph-level cache will still work per-object
+        pass
+
+
+@typechecked
 def export_graph_pkl(filename: str) -> nx.MultiDiGraph:
     """
     Load and return a NetworkX MultiDiGraph from a pickled file.
@@ -298,11 +320,17 @@ def export_graph_generic(filename: str) -> nx.MultiDiGraph:
     # Check the file extension
     file_extension = os.path.splitext(filename)[1].lower()
     if file_extension == ".gml":
-        return export_graph_gml(filename)
+        graph = export_graph_gml(filename)
+        _annotate_graph_source(graph, filename)
+        return graph
     elif file_extension == ".pkl":
-        return export_graph_pkl(filename)
+        graph = export_graph_pkl(filename)
+        _annotate_graph_source(graph, filename)
+        return graph
     elif file_extension == ".json":
-        return export_graph_dsg(filename)
+        graph = export_graph_dsg(filename)
+        _annotate_graph_source(graph, filename)
+        return graph
     else:
         error(f"Unsupported graph file format: {file_extension}. Supported formats are .gml, .pkl, and .json.")
         raise Exception(f"Unsupported graph file format: {file_extension}. Supported formats are .gml, .pkl, and .json.")

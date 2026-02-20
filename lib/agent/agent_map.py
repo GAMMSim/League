@@ -32,10 +32,19 @@ class AgentMap:
         
         # Team flag positions: {team_name: {flag_id: {"position": pos, "time": timestamp}}}
         self.flags = {}
+
+        # Optional all-pairs shortest-path lengths. Populated when global_map sensor
+        # provides full-graph APSP data.
+        self.apsp_lookup: Optional[Dict[Any, Dict[Any, int]]] = None
         
         debug(f"AgentMap initialized with current_time={current_time}, graph={'attached' if graph else 'None'}")
 
-    def attach_networkx_graph(self, nodes_data: Dict[int, Any], edges_data: Dict[int, Any]) -> None:
+    def attach_networkx_graph(
+        self,
+        nodes_data: Dict[int, Any],
+        edges_data: Dict[int, Any],
+        apsp_lookup: Optional[Dict[Any, Dict[Any, int]]] = None,
+    ) -> None:
         """
         Create and attach a directed NetworkX graph based on provided nodes and edges data.
 
@@ -103,8 +112,15 @@ class AgentMap:
         info(f"Graph attached successfully: {nodes_added} nodes, {edges_added} edges added")
         if edges_skipped > 0:
             warning(f"{edges_skipped} edges were skipped due to invalid endpoints")
+        if apsp_lookup is not None:
+            self.set_apsp_lookup(apsp_lookup)
 
-    def update_networkx_graph(self, nodes_data: Dict[int, Any], edges_data: Dict[int, Any]) -> None:
+    def update_networkx_graph(
+        self,
+        nodes_data: Dict[int, Any],
+        edges_data: Dict[int, Any],
+        apsp_lookup: Optional[Dict[Any, Dict[Any, int]]] = None,
+    ) -> None:
         """
         Update the existing graph with new nodes and edges information.
 
@@ -197,6 +213,86 @@ class AgentMap:
         info(f"Graph update completed: {nodes_updated} nodes updated, {nodes_added} nodes added, {edges_updated} edges updated, {edges_added} edges added")
         if edges_skipped > 0:
             warning(f"{edges_skipped} edges were skipped during update due to invalid endpoints")
+        if apsp_lookup is not None:
+            self.set_apsp_lookup(apsp_lookup)
+
+    def set_apsp_lookup(self, apsp_lookup: Optional[Dict[Any, Dict[Any, int]]]) -> None:
+        """Attach or clear APSP lookup table for path queries on this map."""
+        if apsp_lookup is None:
+            self.apsp_lookup = None
+            return
+        if not isinstance(apsp_lookup, dict):
+            warning(f"Ignoring invalid APSP lookup type: {type(apsp_lookup)}")
+            return
+        self.apsp_lookup = apsp_lookup
+
+    def shortest_path_length(self, source: int, target: int) -> Union[int, float]:
+        """
+        Return shortest-path distance from source to target.
+        Uses APSP lookup when available; falls back to NetworkX.
+        """
+        if source == target:
+            return 0
+
+        if self.apsp_lookup is not None:
+            dist = self.apsp_lookup.get(source, {}).get(target)
+            if dist is not None:
+                return dist
+
+        if self.graph is None:
+            warning("No graph attached to AgentMap for shortest_path_length calculation")
+            return float("inf")
+
+        try:
+            return nx.shortest_path_length(self.graph, source=source, target=target)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return float("inf")
+
+    def shortest_path(self, source: int, target: int) -> List[int]:
+        """
+        Return node sequence for a shortest path.
+        Uses APSP lookup + local adjacency when available; falls back to NetworkX.
+        """
+        if self.graph is None:
+            warning("No graph attached to AgentMap for shortest_path calculation")
+            return []
+        if source == target:
+            return [source]
+
+        if self.apsp_lookup is not None:
+            source_row = self.apsp_lookup.get(source, {})
+            dist_to_target = source_row.get(target)
+            if dist_to_target is not None:
+                current = source
+                path = [current]
+                # Build a shortest path by stepping to a neighbor that strictly
+                # decreases distance-to-target by 1.
+                for _ in range(dist_to_target):
+                    if current == target:
+                        break
+                    current_dist = self.apsp_lookup.get(current, {}).get(target)
+                    if current_dist is None or current_dist <= 0:
+                        break
+
+                    best_next = None
+                    for nbr in self.graph.neighbors(current):
+                        nbr_dist = self.apsp_lookup.get(nbr, {}).get(target)
+                        if nbr_dist == current_dist - 1:
+                            if best_next is None or str(nbr) < str(best_next):
+                                best_next = nbr
+                    if best_next is None:
+                        break
+
+                    path.append(best_next)
+                    current = best_next
+
+                if current == target:
+                    return path
+
+        try:
+            return nx.shortest_path(self.graph, source=source, target=target)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return []
 
     def update_time(self, new_time: int) -> None:
         """
@@ -697,20 +793,27 @@ class AgentMap:
         if source == target:
             debug(f"Source {source} is the same as target {target}, no movement needed")
             return source
-            
-        try:
-            path = nx.shortest_path(self.graph, source=source, target=target)
+
+        path = self.shortest_path(source, target)
+        if path:
             debug(f"Shortest path from {source} to {target}: {path}")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            warning(f"No path found from {source} to {target}: {e}")
-            return source  # No path exists or nodes not found
+        else:
+            warning(f"No path found from {source} to {target}")
+            return source
             
         if len(path) <= 1:
             debug(f"Already at target {target}, no movement needed")
             return source  # Already at target
             
         # Move along the path up to 'speed' steps
-        next_index = min(speed, len(path) - 1)
+        try:
+            step_budget = int(speed)
+        except Exception:
+            step_budget = 1
+        if step_budget < 1:
+            return source
+
+        next_index = min(step_budget, len(path) - 1)
         next_node = path[next_index]
         debug(f"Next node on path from {source} to {target} with speed {speed} is {next_node}")
         return next_node
@@ -854,4 +957,3 @@ def debug_agent_map():
 
 if __name__ == "__main__":
     debug_agent_map()
-

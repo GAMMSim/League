@@ -1,0 +1,89 @@
+game:
+  game_rule: v1.2
+  max_time: 200
+  interaction_model:
+    tagging: both_kill
+    capture: kill
+    prioritize: tagging
+  payoff_model:
+    model: zero_sum_reward
+    constants:
+      red_capture: 1.0
+      blue_capture: 1.0
+      red_killed: 0.5
+      blue_killed: 0.5
+agents:
+  red_global:
+    speed: 1
+    capture_radius: 2
+    sensing_radius: 350
+    sensors:
+    - global_map
+    - candidate_flag
+    - agent
+    - egocentric_flag
+    - egocentric_map
+  blue_global:
+    speed: 1
+    tagging_radius: 1
+    sensing_radius: 300
+    sensors:
+    - global_map
+    - custom_team
+    - egocentric_agent
+    - egocentric_map
+    - flag
+    - stationary
+  red_config:
+    red_0:
+      start_node_id: 141
+    red_1:
+      start_node_id: 55
+    red_2:
+      start_node_id: 147
+  blue_config:
+    blue_0:
+      start_node_id: 32
+    blue_1:
+      start_node_id: 193
+    blue_2:
+      start_node_id: 85
+flags:
+  real_positions:
+  - 14
+  - 8
+  - 4
+  candidate_positions: &id001
+  - 14
+  - 8
+  - 4
+  - 183
+  - 25
+environment:
+  graph_name: osm_200.pkl
+  blue_stationary_sensor_radius: 450
+  blue_static_sensor_positions: *id001
+generator:
+  id: 54edbb74a1
+  ts: '2026-02-17 17:02:45'
+  cafl:
+  - 12
+  - 5
+  - normal_t
+  - 2
+  - 1
+  - 1.0
+  reag:
+  - 12
+  - 3
+  - normal_t
+  - 10
+  - 2
+  - 1
+  blag:
+  - 12
+  - 3
+  - normal_t
+  - 3
+  - 1
+  - 1

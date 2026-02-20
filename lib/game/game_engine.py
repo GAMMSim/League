@@ -3,20 +3,24 @@ from typeguard import typechecked
 import networkx as nx
 import traceback
 import importlib
+import os
+import time
 
 try:
     from lib.core.console import *
+    from lib.core.apsp_cache import get_apsp_length_cache, get_cached_distance
     from lib.game.agent_engine import AgentEngine
     from lib.game.sensor_engine import SensorEngine
     from lib.game.interaction_engine import InteractionEngine
-    from lib.game.visualization_engine import VisEngine
+    from lib.game.visualization_engine_new import VisEngine
     from lib.core.logger import Logger
 except ImportError:
     from ..core.console import *
+    from ..core.apsp_cache import get_apsp_length_cache, get_cached_distance
     from ..game.agent_engine import AgentEngine
     from ..game.sensor_engine import SensorEngine
     from ..game.interaction_engine import InteractionEngine
-    from ..game.visualization_engine import VisEngine
+    from .visualization_engine_new import VisEngine
     from ..core.logger import Logger
 
 
@@ -63,12 +67,31 @@ class GameEngine:
         self.blue_killed = 0
         self.discovered_flags: Set[int] = set()
         self.discovered_flags_count = 0
+        # Share the discovered_flags set with the interaction engine so it can
+        # enforce discovery-before-capture (flags must be sensed before captured).
+        self.interaction_engine._discovered_flags = self.discovered_flags
+
+        # Payoff breakdown (for HUD)
+        self.red_tag_penalty = 0.0
+        self.red_capture_reward = 0.0
+        self.red_discover_reward = 0.0
+        self.step_payoff_breakdown = self._empty_step_payoff_breakdown()
 
         # Flag positions from config
         self.flag_config = self.config.get("flags", {})
 
         # Strategy storage
         self.strategies: Dict[str, Any] = {}
+        self._agent_death_time: Dict[str, int] = {}
+        self._first_tag_time: Optional[int] = None
+        self._first_capture_time: Optional[int] = None
+        self._first_discover_time: Optional[int] = None
+
+    def _empty_step_payoff_breakdown(self) -> Dict[str, Dict[str, float]]:
+        return {
+            "red": {"capture": 0.0, "tag": 0.0, "discover": 0.0, "total": 0.0},
+            "blue": {"capture": 0.0, "tag": 0.0, "discover": 0.0, "total": 0.0},
+        }
 
     # ---------- Convenience / Builder APIs (new) ----------
 
@@ -111,12 +134,16 @@ class GameEngine:
         *,
         ctx: Optional[Any] = None,
         root_path: Optional[str] = None,
-        log_name: str = "result",
+        log_name: Optional[str] = "result",
         vis_engine_kind: Optional[Any] = None,
-    ) -> Tuple[Any, nx.Graph, VisEngine, SensorEngine, AgentEngine, InteractionEngine, Logger]:
+        record: bool = False,
+        vis: bool = True,
+    ) -> Tuple[Any, nx.Graph, VisEngine, SensorEngine, AgentEngine, InteractionEngine, Optional[Logger]]:
         """
         Build the full runtime (ctx, graph, vis, sensors, agents, interaction, logger).
         If ctx/graph are missing, create them from config using repo utilities.
+        If log_name is None, no logger will be created and no logging will occur.
+        Recording is independent of logging.
         """
         # Lazy imports to avoid module import cycles when this file is library-imported
         from lib.config.config_loader import ConfigLoader  # not used here but kept to mirror original imports
@@ -134,8 +161,22 @@ class GameEngine:
                 "width": w[0] if isinstance(w, list) and len(w) > 0 else 1200,
                 "height": w[1] if isinstance(w, list) and len(w) > 1 else 800,
             }
-            engine_kind = vis_engine_kind or getattr(gamms.visual.Engine, "PYGAME", None)
+            if vis:
+                engine_kind = vis_engine_kind or getattr(gamms.visual.Engine, "PYGAME", None)
+            else:
+                engine_kind = getattr(gamms.visual.Engine, "NO_VIS", None)
             ctx = gamms.create_context(vis_engine=engine_kind, vis_kwargs=vis_kwargs)
+            
+        # Create logger only if log_name is provided
+        logger = _Logger(log_name) if log_name is not None else None
+        
+        # Recording is independent of logging
+        if record:
+            # Generate a recording filename with timestamp
+            timestamp = int(time.time())
+            recording_filename = f"recording_{timestamp}.ggr"
+            ctx.record.start(path=recording_filename.replace(".ggr", ""))
+            success(f"Recording enabled: {recording_filename}")
 
         if graph is None:
             import pathlib
@@ -144,6 +185,11 @@ class GameEngine:
             root = current_path.parent.parent.parent if root_path is None else pathlib.Path(root_path)
             dirs = get_directories(str(root))
             graph = export_graph_config(config, dirs)
+        # Pre-warm shared APSP cache once for simulator internals.
+        try:
+            get_apsp_length_cache(graph)
+        except Exception as e:
+            warning(f"Failed to prebuild APSP distance cache: {e}")
         # Attach the graph to ctx if available
         try:
             ctx.graph.attach_networkx_graph(graph)  # type: ignore[attr-defined]
@@ -163,9 +209,6 @@ class GameEngine:
         # 5) Interactions
         interaction_engine = InteractionEngine(agent_engine, graph, config)
 
-        # 6) Logger
-        logger = _Logger(log_name)
-
         return ctx, graph, vis_engine, sensor_engine, agent_engine, interaction_engine, logger
 
     @classmethod
@@ -176,12 +219,19 @@ class GameEngine:
         extra_defs: Optional[str] = "config/game_config.yml",
         red_strategy: Union[str, Any, None] = "test_atk",
         blue_strategy: Union[str, Any, None] = "test_def",
-        log_name: str = "test_result",
+        log_name: Optional[str] = "test_result",
         set_level: Optional["LogLevel"] = LogLevel.WARNING,
+        record: bool = False,
+        vis: bool = True,
     ) -> "GameEngine":
         """
         One-liner runner that mirrors the old __main__ behavior but keeps the call-site clean.
         Loads config, builds runtime, assigns strategies, sets up visuals, runs, and returns the engine.
+        
+        Args:
+            log_name: Name for the log file. If None, no logging will occur.
+            record: If True, record the game session to a .ggr file. Recording is independent of logging.
+            vis: If True, use PYGAME visualization. If False, use NO_VIS mode.
         """
         # Lazily import loader/utilities here
         from lib.config.config_loader import ConfigLoader
@@ -203,6 +253,8 @@ class GameEngine:
             root_path=None,
             log_name=log_name,
             vis_engine_kind=None,
+            record=record,
+            vis=vis,
         )
 
         # Create the unified engine
@@ -215,6 +267,30 @@ class GameEngine:
         red_mod, blue_mod = cls.load_strategies(red_strategy, blue_strategy)
         if red_mod or blue_mod:
             engine.assign_strategies(red_mod, blue_mod)
+
+        if engine.logger:
+            def _strategy_label(strategy_obj: Union[str, Any, None]) -> Optional[str]:
+                if strategy_obj is None:
+                    return None
+                if isinstance(strategy_obj, str):
+                    return strategy_obj
+                return getattr(strategy_obj, "__name__", strategy_obj.__class__.__name__)
+
+            try:
+                metadata = engine.logger.get_metadata()
+                metadata.update(
+                    {
+                        "config_main": str(config_main),
+                        "extra_defs": str(extra_defs) if extra_defs else None,
+                        "red_strategy": _strategy_label(red_strategy),
+                        "blue_strategy": _strategy_label(blue_strategy),
+                        "max_time": config.get("game", {}).get("max_time"),
+                        "game_rule": config.get("game", {}).get("game_rule"),
+                    }
+                )
+                engine.logger.set_metadata(metadata)
+            except Exception as e:
+                warning(f"Failed to set logger metadata: {e}")
 
         # Run
         engine.run_game()
@@ -248,6 +324,8 @@ class GameEngine:
             self.vis_engine.setup_agent_visuals(agent_config)
             self.vis_engine.create_flags(self.flag_config)
             self.vis_engine.create_agent_labels(agent_config)
+            self.vis_engine.create_agent_sensor_circles()
+            self.vis_engine.setup_hud()
             success("Game visuals initialized")
         except Exception as e:
             error(f"Failed to setup game visuals: {e}")
@@ -301,14 +379,14 @@ class GameEngine:
             warning(f"Agent {agent_name}: Target node {target_node} does not exist")
             return False
 
-        try:
-            distance = nx.shortest_path_length(self.graph, current_node, target_node)
-            agent_speed = getattr(agent, "speed", 1)
-            if distance > agent_speed:
-                warning(f"Agent {agent_name}: Cannot reach node {target_node} from {current_node} " f"(distance: {distance}, speed: {agent_speed})")
-                return False
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
+        distance_lookup = get_apsp_length_cache(self.graph)
+        distance = get_cached_distance(distance_lookup, current_node, target_node)
+        if distance is None:
             warning(f"Agent {agent_name}: No path from {current_node} to {target_node}")
+            return False
+        agent_speed = getattr(agent, "speed", 1)
+        if distance > agent_speed:
+            warning(f"Agent {agent_name}: Cannot reach node {target_node} from {current_node} " f"(distance: {distance}, speed: {agent_speed})")
             return False
 
         try:
@@ -337,8 +415,7 @@ class GameEngine:
 
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:
                     try:
-                        flag_discovered = agent_controller.strategy(state)
-                        self.discovered_flags.update(flag_discovered)
+                        agent_controller.strategy(state)
                         action = state.get("action")
                         actions[agent_name] = action
                     except Exception as e:
@@ -365,7 +442,7 @@ class GameEngine:
         payoff_config = self.game_config.get("payoff_model", {})
         model = payoff_config.get("model", "zero_sum")
 
-        default_constants = {"red_capture": 1, "blue_capture": 1, "red_killed": 1, "blue_killed": 1}
+        default_constants = {"red_capture": 1, "blue_capture": 1, "red_killed": 0.5, "blue_killed": 0.5}
         constants = {**default_constants, **payoff_config.get("constants", {})}
 
         red_capture_reward = constants["red_capture"]
@@ -373,43 +450,119 @@ class GameEngine:
         red_kill_penalty = constants["red_killed"]
         blue_kill_penalty = constants["blue_killed"]
 
+        step_red_capture = 0.0
+        step_red_tag = 0.0
+        step_red_discover = 0.0
+
         if model == "zero_sum" or model == "zero_sum_reward":
-            red_payoff = red_capture_reward * red_captures - red_kill_penalty * red_killed
-            real_flags = set(self.flag_config.get("real_positions", []))
-            self.discovered_flags.intersection_update(set(real_flags))
+            step_red_capture = red_capture_reward * red_captures
+            step_red_tag = -red_kill_penalty * red_killed
             if len(self.discovered_flags) > self.discovered_flags_count:
                 newly_discovered = len(self.discovered_flags) - self.discovered_flags_count
-                red_payoff += newly_discovered * 0.1  # Reward for discovering new flags
+                step_red_discover = newly_discovered * 0.1
                 self.discovered_flags_count = len(self.discovered_flags)
-            
+
+            red_payoff = step_red_capture + step_red_tag + step_red_discover
             blue_payoff = -red_payoff
         elif model == "non_zero_sum":
-            red_payoff = red_capture_reward * red_captures - red_kill_penalty * red_killed
+            step_red_capture = red_capture_reward * red_captures
+            step_red_tag = -red_kill_penalty * red_killed
+            red_payoff = step_red_capture + step_red_tag
             blue_payoff = blue_capture_reward * blue_captures - blue_kill_penalty * blue_killed
         else:
             warning(f"Unknown payoff model: {model}. Using zero_sum.")
-            red_payoff = red_capture_reward * red_captures - blue_capture_reward * blue_captures - red_kill_penalty * red_killed + blue_kill_penalty * blue_killed
+            step_red_capture = red_capture_reward * red_captures - blue_capture_reward * blue_captures
+            step_red_tag = -red_kill_penalty * red_killed + blue_kill_penalty * blue_killed
+            red_payoff = step_red_capture + step_red_tag
             blue_payoff = -red_payoff
+
+        self.red_capture_reward += step_red_capture
+        self.red_tag_penalty += step_red_tag
+        self.red_discover_reward += step_red_discover
+
+        self.step_payoff_breakdown = {
+            "red": {
+                "capture": step_red_capture,
+                "tag": step_red_tag,
+                "discover": step_red_discover,
+                "total": red_payoff,
+            },
+            "blue": {"total": blue_payoff},
+        }
 
         return red_payoff, blue_payoff
 
-    def check_termination(self) -> bool:
-        if self.time_counter >= self.max_time:
+    def check_termination(self) -> Optional[str]:
+        reason = self._termination_reason()
+        if reason == "time":
             info(f"Game terminated: Maximum time ({self.max_time}) reached")
-            return True
+            return reason
+        if reason == "red_eliminated":
+            info("Game terminated: All red team agents eliminated")
+            return reason
+        if reason == "blue_eliminated":
+            info("Game terminated: All blue team agents eliminated")
+            return reason
+        return None
+
+    def _termination_reason(self) -> Optional[str]:
+        if self.time_counter >= self.max_time:
+            return "time"
 
         remaining_red = len(self.agent_engine.get_active_agents_by_team("red"))
         remaining_blue = len(self.agent_engine.get_active_agents_by_team("blue"))
 
         if remaining_red == 0:
-            info("Game terminated: All red team agents eliminated")
-            return True
+            return "red_eliminated"
 
         if remaining_blue == 0:
-            info("Game terminated: All blue team agents eliminated")
-            return True
+            return "blue_eliminated"
 
-        return False
+        return None
+
+    def _maybe_render_dry_run_frame(self, reason: Optional[str]) -> None:
+        if reason not in ("red_eliminated", "blue_eliminated"):
+            return
+        if not self.vis_engine:
+            return
+        try:
+            self.vis_engine.update_display()
+        except Exception as e:
+            warning(f"Dry-run frame render failed: {e}")
+
+    def _build_agent_survival_records(self) -> List[Dict[str, Any]]:
+        records: List[Dict[str, Any]] = []
+        end_time = self.time_counter
+        for ctrl in self.agent_engine.all_agents:
+            name = ctrl.name
+            death_time = self._agent_death_time.get(name)
+            observed = death_time is not None
+            survival_time = max(0, (death_time if observed else end_time))
+
+            records.append(
+                {
+                    "agent_name": name,
+                    "team": ctrl.team,
+                    "start_node": ctrl.start_node_id,
+                    "death_time": death_time,
+                    "censored": not observed,
+                    "survival_time": survival_time,
+                }
+            )
+        return records
+
+    def _update_first_event_times(self, t: int, capture_details, tagging_details, new_discoveries) -> None:
+        if self._first_capture_time is None and capture_details:
+            self._first_capture_time = t
+        if self._first_tag_time is None and tagging_details:
+            self._first_tag_time = t
+        if self._first_discover_time is None and new_discoveries:
+            self._first_discover_time = t
+
+    def _record_deaths(self, time_value: int, alive_before: Set[str]) -> None:
+        alive_after = {agent.name for agent in self.agent_engine.get_active_agents()}
+        for name in alive_before - alive_after:
+            self._agent_death_time.setdefault(name, time_value)
 
     def log_game_state(
         self,
@@ -419,6 +572,7 @@ class GameEngine:
         step_blue_killed: int = 0,
         capture_details: Optional[List] = None,
         tagging_details: Optional[List] = None,
+        discovered_flags: Optional[Set[int]] = None,
     ) -> None:
         if not self.logger:
             return
@@ -431,6 +585,15 @@ class GameEngine:
         log_data = {
             "agents": agent_positions,
             "payoff": {"red": self.red_payoff_accum, "blue": self.blue_payoff_accum},
+            "payoff_step_components": self.step_payoff_breakdown,
+            "payoff_cumulative_components": {
+                "red": {
+                    "capture": self.red_capture_reward,
+                    "tag": self.red_tag_penalty,
+                    "discover": self.red_discover_reward,
+                    "total": self.red_payoff_accum,
+                },
+            },
             "red_captures": self.red_captures,
             "blue_captures": self.blue_captures,
             "red_agent_killed": step_red_killed,
@@ -438,10 +601,41 @@ class GameEngine:
             "total_tags": len(tagging_details or []),
             "tagging_details": tagging_details or [],
             "capture_details": capture_details or [],
+            "discovered_flags_this_step": sorted(list(discovered_flags or set())),
+            "discovered_flags_cumulative": sorted(list(self.discovered_flags)),
             "time": self.time_counter,
         }
 
         self.logger.log_data(log_data, self.time_counter)
+
+    def _feed_hud_events(self, capture_details, tagging_details, discovered_flags) -> None:
+        """Send game events and payoff breakdown to the HUD overlay."""
+        if not self.vis_engine:
+            return
+        RED = (200, 50, 50)
+        BLUE = (50, 50, 200)
+        GREEN = (50, 180, 50)
+
+        for agent_name, _agent_team, flag_node in (capture_details or []):
+            self.vis_engine.add_hud_event(f"{agent_name} captured Flag {flag_node}", GREEN)
+
+        for red_name, blue_name, outcome in (tagging_details or []):
+            if "both" in outcome:
+                self.vis_engine.add_hud_event(f"{blue_name} tagged {red_name} ({outcome})", BLUE)
+            elif "red" in outcome:
+                self.vis_engine.add_hud_event(f"{blue_name} tagged {red_name}", BLUE)
+            else:
+                self.vis_engine.add_hud_event(f"{red_name} tagged {blue_name}", RED)
+
+        for flag_id in (discovered_flags or set()):
+            self.vis_engine.add_hud_event(f"Flag {flag_id} discovered", GREEN)
+
+        self.vis_engine.update_hud_payoff(
+            total=self.red_payoff_accum,
+            tag=self.red_tag_penalty,
+            capture=self.red_capture_reward,
+            discover=self.red_discover_reward,
+        )
 
     def run_single_step(self) -> bool:
         try:
@@ -449,8 +643,9 @@ class GameEngine:
             self.process_movements(actions)
 
             if self.vis_engine:
-                self.vis_engine.update_all_agent_labels()
                 self.vis_engine.update_display()
+
+            alive_before = {a.name for a in self.agent_engine.get_active_agents()}
 
             (
                 step_red_caps,
@@ -461,20 +656,42 @@ class GameEngine:
                 remaining_blue,
                 capture_details,
                 tagging_details,
+                step_discovered_flags,
             ) = self.interaction_engine.step(self.time_counter)
+            self._record_deaths(self.time_counter, alive_before)
 
             self.red_captures += step_red_caps
             self.blue_captures += step_blue_caps
             self.red_killed += step_red_killed
             self.blue_killed += step_blue_killed
+            new_discoveries = step_discovered_flags - self.discovered_flags
+            self.discovered_flags.update(step_discovered_flags)
+            self._update_first_event_times(self.time_counter, capture_details, tagging_details, new_discoveries)
+
+            # Visualize flag captures
+            if self.vis_engine and capture_details:
+                for agent_name, agent_team, flag_node in capture_details:
+                    self.vis_engine.mark_flag_captured(agent_name, agent_team, flag_node)
 
             red_payoff, blue_payoff = self.compute_payoff(step_red_caps, step_blue_caps, step_red_killed, step_blue_killed)
             self.red_payoff_accum += red_payoff
             self.blue_payoff_accum += blue_payoff
 
-            self.log_game_state(step_red_caps, step_blue_caps, step_red_killed, step_blue_killed, capture_details, tagging_details)
+            self._feed_hud_events(capture_details, tagging_details, new_discoveries)
 
-            if self.check_termination():
+            self.log_game_state(
+                step_red_caps,
+                step_blue_caps,
+                step_red_killed,
+                step_blue_killed,
+                capture_details,
+                tagging_details,
+                discovered_flags=new_discoveries,
+            )
+
+            reason = self.check_termination()
+            if reason:
+                self._maybe_render_dry_run_frame(reason)
                 return False
 
             return True
@@ -487,8 +704,15 @@ class GameEngine:
         try:
             self.is_running = True
             self.game_terminated = False
+            self.step_payoff_breakdown = self._empty_step_payoff_breakdown()
+            self._agent_death_time = {}
+            self._first_tag_time = None
+            self._first_capture_time = None
+            self._first_discover_time = None
 
             info(f"Starting game with max time: {self.max_time}")
+
+            alive_before = {a.name for a in self.agent_engine.get_active_agents()}
 
             (
                 init_red_caps,
@@ -499,20 +723,42 @@ class GameEngine:
                 remaining_blue,
                 capture_details,
                 tagging_details,
+                init_discovered_flags,
             ) = self.interaction_engine.step(self.time_counter)
+            self._record_deaths(self.time_counter, alive_before)
 
             self.red_captures += init_red_caps
             self.blue_captures += init_blue_caps
             self.red_killed += init_red_killed
             self.blue_killed += init_blue_killed
+            init_new_discoveries = init_discovered_flags - self.discovered_flags
+            self.discovered_flags.update(init_discovered_flags)
+            self._update_first_event_times(self.time_counter, capture_details, tagging_details, init_new_discoveries)
+
+            # Visualize flag captures at t=0
+            if self.vis_engine and capture_details:
+                for agent_name, agent_team, flag_node in capture_details:
+                    self.vis_engine.mark_flag_captured(agent_name, agent_team, flag_node)
 
             red_payoff, blue_payoff = self.compute_payoff(init_red_caps, init_blue_caps, init_red_killed, init_blue_killed)
             self.red_payoff_accum += red_payoff
             self.blue_payoff_accum += blue_payoff
 
-            self.log_game_state(init_red_caps, init_blue_caps, init_red_killed, init_blue_killed, capture_details, tagging_details)
+            self._feed_hud_events(capture_details, tagging_details, init_new_discoveries)
 
-            if self.check_termination():
+            self.log_game_state(
+                init_red_caps,
+                init_blue_caps,
+                init_red_killed,
+                init_blue_killed,
+                capture_details,
+                tagging_details,
+                discovered_flags=init_new_discoveries,
+            )
+
+            reason = self.check_termination()
+            if reason:
+                self._maybe_render_dry_run_frame(reason)
                 self.game_terminated = True
                 return (
                     self.red_payoff_accum,
@@ -568,6 +814,12 @@ class GameEngine:
                     blue_captures=self.blue_captures,
                     red_killed=self.red_killed,
                     blue_killed=self.blue_killed,
+                    survival_records=self._build_agent_survival_records(),
+                    payoff_components={
+                        "capture": self.red_capture_reward,
+                        "tag": self.red_tag_penalty,
+                        "discover": self.red_discover_reward,
+                    },
                 )
 
     def stop_game(self) -> None:
@@ -589,7 +841,12 @@ class GameEngine:
 
     def __str__(self) -> str:
         state = "running" if self.is_running else "stopped"
-        return f"GameEngine(time={self.time_counter}, state={state}, red_payoff={self.red_payoff_accum:.2f}, blue_payoff={self.blue_payoff_accum:.2f})"
+        return (
+            f"GameEngine(time={self.time_counter}, state={state}, "
+            f"red_payoff={self.red_payoff_accum:.2f}, blue_payoff={self.blue_payoff_accum:.2f}, "
+            f"breakdown={{capture:{self.red_capture_reward:.2f}, "
+            f"tag:{self.red_tag_penalty:.2f}, discover:{self.red_discover_reward:.2f}}})"
+        )
 
 
 # ----------------------- Clean __main__ -----------------------

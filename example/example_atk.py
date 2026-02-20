@@ -1,6 +1,7 @@
 def strategy(state):
     from typing import Dict, List, Tuple, Any
     import networkx as nx
+    import random
 
     # ===== AGENT CONTROLLER =====
     # DO NOT directly call agent_ctrl methods unless you understand the library
@@ -35,7 +36,9 @@ def strategy(state):
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
-    global_map_sensor: nx.Graph = state["sensor"]["global_map"][1]["graph"]  # Full graph topology from sensor
+    global_map_payload: Dict[str, Any] = state["sensor"]["global_map"][1]
+    global_map_sensor: nx.Graph = global_map_payload["graph"]  # Full graph topology from sensor
+    global_map_apsp = global_map_payload.get("apsp")
 
     nodes_data: Dict[int, Dict[str, Any]] = {node_id: global_map_sensor.nodes[node_id] for node_id in global_map_sensor.nodes()}  # Convert graph nodes to dict format
 
@@ -43,7 +46,11 @@ def strategy(state):
     for idx, (u, v, data) in enumerate(global_map_sensor.edges(data=True)):
         edges_data[idx] = {"source": u, "target": v, **data}
 
-    agent_map.attach_networkx_graph(nodes_data, edges_data)  # Initialize map's internal graph
+    agent_map.attach_networkx_graph(
+        nodes_data,
+        edges_data,
+        apsp_lookup=global_map_apsp if isinstance(global_map_apsp, dict) else None,
+    )  # Initialize map's internal graph (+ APSP if available)
     agent_map.update_time(current_time)  # Sync map time with game time for age tracking
 
     # Update own position in map (call this every turn to track your position)
@@ -86,12 +93,17 @@ def strategy(state):
     if "egocentric_flag" in sensors:
         flags: List[int] = sensors["egocentric_flag"][1]["detected_flags"]  # Flags visible to agent
         if flags:
-            # Move to the next
-            target = agent_map.shortest_path_step(current_pos, flags[0], speed)# Move toward first visible flag
-    elif agent_map.graph is not None:
-        neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))  # Adjacent nodes
-        if neighbors:
-            target = neighbors[0]  # Move to first neighbor
+            target = agent_map.shortest_path_step(current_pos, flags[0], speed)  # Move toward first visible flag
+        elif agent_map.graph is not None:
+            neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))  # Adjacent nodes
+            if neighbors:
+                target = random.choice(neighbors)  # No flags visible — wander to a neighbor
+    else:
+        flags = []
+        if agent_map.graph is not None:
+            neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))
+            if neighbors:
+                target = random.choice(neighbors)  # Move to first neighbor
 
     # ===== OUTPUT =====
     state["action"] = target  # Required: set target node for this turn

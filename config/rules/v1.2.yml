@@ -7,16 +7,19 @@ game:
     prioritize: tagging
   payoff_model:
     model: zero_sum_reward
-    capture_constant: 1.0
-    tagging_constant: 0.5
-    detection_constant: 0.1
+    constants:
+      red_capture: 1.0
+      blue_capture: 1.0
+      red_killed: 0.5
+      blue_killed: 0.5
   
 
 agents:
   red_global:
     speed: 1
     capture_radius: 2
-    sensing_radius: 400
+    # sensing_radius: 400
+    sensing_radius: 350
     sensors:
     - global_map
     - candidate_flag
@@ -26,7 +29,8 @@ agents:
   blue_global:
     speed: 1
     tagging_radius: 1
-    sensing_radius: 250
+    # sensing_radius: 250 
+    sensing_radius: 300
     sensors:
     - global_map
     - custom_team

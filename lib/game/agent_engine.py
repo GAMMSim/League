@@ -237,6 +237,7 @@ class AgentEngine:
                 team=team,
                 capture_radius=agent_params.get("capture_radius", 0),
                 tagging_radius=agent_params.get("tagging_radius", 0),
+                sensing_radius=agent_params.get("sensing_radius", None),
                 **extra_params
             )
             
@@ -470,17 +471,18 @@ class AgentEngine:
         """Get active/alive agents belonging to a specific team"""
         return self.active_agents_by_team.get(team, []).copy()
 
-    def kill_agent(self, agent_name: str) -> bool:
+    def kill_agent(self, agent_name: str, death_type: str = "kill") -> bool:
         """
-        Kill/deactivate an agent and clean up its artifacts in the ctx (visuals, sensors, registry).
+        Kill/deactivate an agent.
 
         Args:
             agent_name: Name of agent to kill
+            death_type: "kill" (full removal) or "tagged" (visual death markers)
 
         Returns:
-            True if agent was killed, False if agent not found or already dead
+            True if agent was killed, False otherwise
         """
-        debug(f"Attempting to kill agent '{agent_name}'")
+        debug(f"Attempting to kill agent '{agent_name}' (death_type={death_type})")
         agent = self.agents.get(agent_name)
         if agent is None:
             warning(f"Agent '{agent_name}' not found")
@@ -491,19 +493,29 @@ class AgentEngine:
             debug(f"Agent '{agent_name}' is already dead")
             return False
 
-        # --- Remove agent label from visualization (if vis_engine available) ---
-        if self.vis_engine is not None:
-            try:
-                self.vis_engine.remove_agent_label(agent_name)
-                debug(f"Removed label for killed agent '{agent_name}'")
-            except Exception as e:
-                warning(f"Failed to remove label for agent '{agent_name}': {e}")
+        # === VISUAL HANDLING ===
+        if death_type == "tagging" or death_type == "probabilistic_tagging":
+            # Leave visual corpse with gray color and cross
+            if self.vis_engine is not None:
+                try:
+                    self.vis_engine.mark_agent_tagged(agent_name)
+                    debug(f"Marked agent '{agent_name}' as visually dead")
+                except Exception as e:
+                    warning(f"Failed to mark agent dead: {e}")
+        else:  # death_type == "kill" or "capture"
+            # Complete visual removal
+            if self.vis_engine is not None:
+                try:
+                    self.vis_engine.remove_agent_visual(agent_name)
+                    debug(f"Removed visuals for agent '{agent_name}'")
+                except Exception as e:
+                    warning(f"Failed to remove visuals: {e}")
 
-        # --- Context cleanup (best-effort) ---
+        # === GAMEPLAY CLEANUP (same for both types) ===
         try:
             gamms_agent = getattr(agent, "gamms_agent", None)
 
-            # 1) Deregister sensors from the underlying agent (if any)
+            # 1) Deregister sensors from the underlying agent
             if gamms_agent is not None:
                 sensor_list = list(getattr(gamms_agent, "_sensor_list", []))
                 for sname in sensor_list:
@@ -513,37 +525,7 @@ class AgentEngine:
                         warning(f"Failed to deregister sensor '{sname}' from agent '{agent_name}'")
                         pass
 
-            # 2) Remove visual artists (main + sensors + aux)
-            vis = getattr(self.ctx, "visual", None)
-            if vis is not None and hasattr(vis, "remove_artist"):
-                # main artist
-                try:
-                    vis.remove_artist(agent_name)
-                except Exception:
-                    warning(f"Failed to remove main artist for agent '{agent_name}'")
-                    pass
-
-                # sensor artists
-                if gamms_agent is not None:
-                    for sname in list(getattr(gamms_agent, "_sensor_list", [])):
-                        try:
-                            vis.remove_artist(f"sensor_{sname}")
-                        except Exception:
-                            warning(f"Failed to remove sensor artist 'sensor_{sname}' for agent '{agent_name}'")
-                            pass
-
-                # auxiliary artists prefixed with agent name
-                rm = getattr(vis, "_render_manager", None)
-                if rm is not None:
-                    for artist_id in list(getattr(rm, "_artists", {}).keys()):
-                        if artist_id.startswith(f"{agent_name}_"):
-                            try:
-                                vis.remove_artist(artist_id)
-                            except Exception:
-                                warning(f"Failed to remove aux artist '{artist_id}' for agent '{agent_name}'")
-                                pass
-
-            # 3) Remove the agent from the ctx registry (engine-side store is handled below)
+            # 2) Remove the agent from the ctx registry
             ctx_agent_mgr = getattr(self.ctx, "agent", None)
             if ctx_agent_mgr is not None and hasattr(ctx_agent_mgr, "delete_agent"):
                 try:
@@ -563,7 +545,7 @@ class AgentEngine:
                 warning(f"Failed to delete agent '{agent_name}' from ctx registry")
                 pass
 
-        # --- Engine-side state updates ---
+        # === ENGINE-SIDE STATE UPDATES ===
         try:
             agent.die()  # mark controller dead
         except Exception:
@@ -581,7 +563,7 @@ class AgentEngine:
         # Decrement team counter (clamp at 0)
         self.team_counts[agent.team] = max(0, self.team_counts.get(agent.team, 0) - 1)
 
-        info(f"Agent '{agent_name}' killed and cleaned up (team '{agent.team}').")
+        info(f"Agent '{agent_name}' killed ({death_type}) (team '{agent.team}').")
         return True
 
     def move_agent(self, agent_name: str, target_node: int) -> bool:
@@ -757,6 +739,27 @@ class AgentEngine:
             return None
 
         return engine_agent
+
+    def get_active_agent(self, agent_name: str) -> Optional[AgentController]:
+        """
+        Get an agent only if it is alive and synchronized with context.
+
+        Args:
+            agent_name: Name of the agent to retrieve
+
+        Returns:
+            Active AgentController if validation passes, None otherwise
+        """
+        engine_agent = self.agents.get(agent_name)
+        if engine_agent is None:
+            debug(f"Agent '{agent_name}' not found in engine storage")
+            return None
+
+        if not engine_agent.is_alive():
+            debug(f"Agent '{agent_name}' is not active/alive")
+            return None
+
+        return self.get_validated_agent(agent_name)
 
     def validate_all_agents(self) -> Dict[str, bool]:
         """

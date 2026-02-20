@@ -35,7 +35,9 @@ def strategy(state):
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map
-    global_map_sensor: nx.Graph = state["sensor"]["global_map"][1]["graph"]
+    global_map_payload: Dict[str, Any] = state["sensor"]["global_map"][1]
+    global_map_sensor: nx.Graph = global_map_payload["graph"]
+    global_map_apsp = global_map_payload.get("apsp")
 
     # ------- #
     nodes_data: Dict[int, Dict[str, Any]] = {node_id: global_map_sensor.nodes[node_id] for node_id in global_map_sensor.nodes()}
@@ -44,7 +46,11 @@ def strategy(state):
     for idx, (u, v, data) in enumerate(global_map_sensor.edges(data=True)):
         edges_data[idx] = {"source": u, "target": v, **data}
 
-    agent_map.attach_networkx_graph(nodes_data, edges_data)
+    agent_map.attach_networkx_graph(
+        nodes_data,
+        edges_data,
+        apsp_lookup=global_map_apsp if isinstance(global_map_apsp, dict) else None,
+    )
     # ------- #
     
     agent_map.update_time(current_time)
@@ -92,9 +98,17 @@ def strategy(state):
             fixed_pos: int = sensor_data["fixed_position"]  # Sensor location
             detected_agents: Dict[str, Dict[str, Any]] = sensor_data["detected_agents"]  # {agent_name: {node_id, distance}}
             agent_count: int = sensor_data["agent_count"]  # Number detected
-            stationary_detections.append({"position": fixed_pos, "detected": detected_agents, "count": agent_count})
+            covered_nodes: List[int] = sensor_data.get("covered_nodes", [])  # Sensing coverage footprint
+            stationary_detections.append(
+                {
+                    "position": fixed_pos,
+                    "detected": detected_agents,
+                    "count": agent_count,
+                    "covered_nodes": covered_nodes,
+                }
+            )
             
-    print(stationary_detections)  # For debugging
+    # print(stationary_detections)  # For debugging
 
     # ===== DECISION LOGIC =====
     target: int = current_pos

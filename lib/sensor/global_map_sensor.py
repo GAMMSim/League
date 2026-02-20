@@ -1,5 +1,9 @@
 from gamms.SensorEngine import SensorType
 from gamms.typing import ISensor
+try:
+    from lib.core.apsp_cache import get_apsp_length_cache
+except ImportError:
+    from ..core.apsp_cache import get_apsp_length_cache
 
 def create_global_map_sensor_class(ctx):
     """Factory function to create GlobalMapSensor class with the given context."""
@@ -32,7 +36,10 @@ def create_global_map_sensor_class(ctx):
         
         def sense(self, node_id: int):
             """Return the NetworkX graph."""
-            self._data = {'graph': self._nx_graph}
+            self._data = {
+                'graph': self._nx_graph,
+                'apsp': get_apsp_length_cache(self._nx_graph),
+            }
         
         def update(self, data):
             pass
