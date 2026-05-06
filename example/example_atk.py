@@ -115,10 +115,9 @@ def strategy(state):
                 target = random.choice(neighbors)  # Move to first neighbor
 
     # ===== OUTPUT =====
-    state["action"] = current_pos  # Required: set target node for this turn
+    state["action"] = target  # Required: set action for this turn
     
-    # Return discovered flags for potential reward calculation
-    return set(flags)
+    return set()
 
 
 def map_strategy(agent_config):

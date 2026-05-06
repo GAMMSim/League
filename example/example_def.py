@@ -121,6 +121,14 @@ def strategy(state):
 
     # ===== DECISION LOGIC =====
     target: int = current_pos
+    known_attackers = agent_map.get_team_agents("red")
+    if known_attackers:
+        _, attacker_pos, _ = min(
+            known_attackers,
+            key=lambda item: agent_map.shortest_path_length(current_pos, item[1]),
+        )
+        target = agent_map.shortest_path_step(current_pos, attacker_pos, speed)
+
     # ===== OUTPUT =====
     state["action"] = target
     
