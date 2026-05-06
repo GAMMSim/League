@@ -5,13 +5,6 @@ ATTACKER_CAPTURE_RADIUS = 2  # from game config (red capture_radius)
 # Set to 0.0 for pure static coverage (no deployment penalty).
 DEPLOY_WEIGHT = 0
 
-# Debug/trace controls for recording behavior.
-# When True, this strategy prints debug/info lines directly, regardless of
-# global console log level (e.g., even if set_level=LogLevel.WARNING).
-FORCE_DEBUG_PRINTS = True
-# Per-turn summary of current position, phase, and chosen target.
-PRINT_TURN_SUMMARY = True
-
 # Phase 1 position search mode: "greedy" or "exhaustive"
 # "exhaustive" runs brute-force up to MAX_EXHAUSTIVE_SECONDS then uses best found.
 SEARCH_MODE = "greedy"
@@ -21,9 +14,8 @@ MAX_EXHAUSTIVE_SECONDS = 500
 
 def strategy(state):
     from typing import Dict, List, Tuple, Any
-    from datetime import datetime
     import networkx as nx
-    from lib.core.console import info as console_info, debug as console_debug
+    from lib.core.console import info, debug
 
     # ===== AGENT CONTROLLER =====
     agent_ctrl = state["agent_controller"]
@@ -38,23 +30,6 @@ def strategy(state):
 
     cache = agent_ctrl.cache
     team_cache = agent_ctrl.team_cache
-
-    # Local logger wrappers so this policy can force-print traces for recording.
-    def _trace(level: str, text: str):
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        print(f"[{timestamp}][gmu_def_r3::{agent_ctrl.name}] {level}: {text}")
-
-    def info(text: str):
-        if FORCE_DEBUG_PRINTS:
-            _trace("INFO", text)
-        else:
-            console_info(text)
-
-    def debug(text: str):
-        if FORCE_DEBUG_PRINTS:
-            _trace("DEBUG", text)
-        else:
-            console_debug(text)
 
     # ===== AGENT MAP =====
     agent_map = agent_ctrl.map
@@ -374,6 +349,12 @@ def strategy(state):
     # Multiple attackers at the same node require coverage >= count.
     # Only the first agent per turn runs the computation;
     # all others read the cached result.
+    #
+    # Aggressive tagging extension (vs gmu_def_r3):
+    # When atk_margin >= 0 (all attacker threat pairs covered),
+    # tag_scores (negative min defender-to-attacker distance) is
+    # promoted above bnd_margins so defenders opportunistically
+    # close in on visible attackers without sacrificing flag coverage.
     # =========================================================
     if team_cache.get("phase2_active", False) and team_cache.get("positions_computed", False):
 
@@ -481,25 +462,54 @@ def strategy(state):
             #                       and gives directional guidance to prevent oscillation)
             #   3. bnd_margin     : min margin over all pairs (secondary — boundary coverage)
             if atk_pair_indices:
-                atk_covered_count = (margins_all[:, atk_pair_indices] >= 0).sum(axis=1)
                 atk_margins = margins_all[:, atk_pair_indices].min(axis=1)
                 atk_sum_margins = margins_all[:, atk_pair_indices].sum(axis=1)
             else:
-                atk_covered_count = np.zeros(len(all_combos), dtype=np.int16)
                 atk_margins = np.zeros(len(all_combos), dtype=np.int16)
                 atk_sum_margins = np.zeros(len(all_combos), dtype=np.int16)
             bnd_margins = margins_all.min(axis=1)
-            bnd_covered_count = (cov_all >= required_arr[np.newaxis, :]).sum(axis=1)
-            bnd_sum_margins = margins_all.sum(axis=1)
 
-            # Lexsort priority (last = highest):
-            # 0. atk_covered_count — number of attacker pairs with margin >= 0 (how many attackers we can stop)
-            # 1. atk_margins       — min margin over attacker pairs (how well we stop the worst one)
-            # 2. atk_sum_margins   — sum margin over attacker pairs (how well we do against the rest)
-            # 3. bnd_margins       — min margin over all boundary pairs
-            # 4. bnd_covered_count — number of boundary pairs covered (no stacking bonus)
-            # 5. bnd_sum_margins   — sum margin over all pairs (residual tiebreaker)
-            best_idx = int(np.lexsort((bnd_sum_margins, bnd_covered_count, bnd_margins, atk_sum_margins, atk_margins, atk_covered_count))[-1])
+            # ---- Tag score: negative min defender-to-attacker distance (maximised) ----
+            # tag_score_arr[i] = -min_{a in attacker_positions} dist(unique_cands[i], a)
+            # Higher = defender is closer to an attacker.
+            # When no attackers are visible, all zeros (no tiebreaking effect).
+            if attacker_positions:
+                atk_pos_list = list(attacker_positions)
+                tag_score_arr = np.array(
+                    [
+                        -min(agent_map.shortest_path_length(p, a) for a in atk_pos_list)
+                        for p in unique_cands
+                    ],
+                    dtype=np.float64,
+                )
+            else:
+                tag_score_arr = np.zeros(n_cands, dtype=np.float64)
+
+            # Per-combo tag score = max over defenders (best single defender proximity)
+            tag_scores = np.max(
+                np.stack(
+                    [tag_score_arr[all_combos[:, k]] for k in range(len(sorted_defenders))],
+                    axis=1,
+                ),
+                axis=1,
+            )
+
+            # Conservative 4-key sort: tagging is the final tiebreaker only
+            best_idx_conservative = int(
+                np.lexsort((tag_scores, bnd_margins, atk_sum_margins, atk_margins))[-1]
+            )
+
+            # Aggressive mode: when attacker coverage is guaranteed, promote tagging
+            # above boundary slack. Coverage of real attacker pairs is never sacrificed.
+            if atk_pair_indices and atk_margins[best_idx_conservative] >= 0:
+                best_idx = int(
+                    np.lexsort((bnd_margins, tag_scores, atk_sum_margins, atk_margins))[-1]
+                )
+                _tagging_mode = "aggressive"
+            else:
+                best_idx = best_idx_conservative
+                _tagging_mode = "conservative" if attacker_positions else "none"
+
             best_combo_indices = tuple(int(x) for x in all_combos[best_idx])
 
             dynamic_assignment = {
@@ -514,31 +524,15 @@ def strategy(state):
             bnd_pair_indices = [j for j in range(n_pairs) if j not in set(atk_pair_indices)]
             atk_covered = sum(1 for j in atk_pair_indices if best_margins[j] >= 0)
             bnd_covered = sum(1 for j in bnd_pair_indices if best_margins[j] >= 0)
-
-            # --- DIAGNOSTIC: check if "stay" combo would be better ---
-            stay_indices = tuple(cand_idx_map[defender_starts[d]] for d in sorted_defenders)
-            stay_combo_row = np.array(stay_indices, dtype=np.int32)
-            stay_cov = cov_matrix[stay_combo_row, :].sum(axis=0)
-            stay_bnd_covered = int((stay_cov[bnd_pair_indices] >= required_arr[bnd_pair_indices]).sum()) if bnd_pair_indices else 0
-            stay_bnd_sum = int((stay_cov - required_arr).sum())
-            best_bnd_sum = int((margins_all[best_idx]).sum())
-            all_identical = bool(np.all(bnd_margins == bnd_margins[0]))
-            chosen_positions = {sorted_defenders[k]: unique_cands[best_combo_indices[k]] for k in range(len(sorted_defenders))}
-            moves = sum(1 for k, d in enumerate(sorted_defenders) if defender_starts[d] != unique_cands[best_combo_indices[k]])
             debug(f"[{agent_ctrl.name}] Phase2 t={current_time} | "
                   f"{len(all_combos)} combos | "
                   f"atk_worst_gap={int(atk_margins[best_idx])} "
                   f"atk_total_slack={int(atk_sum_margins[best_idx])} "
                   f"global_worst_gap={int(bnd_margins[best_idx])} "
-                  f"bnd_total_slack={int(bnd_sum_margins[best_idx])} | "
+                  f"tag_score={float(tag_scores[best_idx]):.1f} "
+                  f"tagging_mode={_tagging_mode} | "
                   f"ATK:{atk_covered}/{len(atk_pair_indices)} BND:{bnd_covered}/{len(bnd_pair_indices)} | "
                   f"attackers={dict(sorted(visible_attackers.items()))}")
-            debug(f"[{agent_ctrl.name}] DIAG t={current_time} | "
-                  f"all_bnd_scores_identical={all_identical} "
-                  f"best_bnd_sum={best_bnd_sum} stay_bnd_sum={stay_bnd_sum} "
-                  f"stay_bnd_covered={stay_bnd_covered} "
-                  f"defenders_moving={moves}/{len(sorted_defenders)} "
-                  f"chosen={chosen_positions}")
 
             team_cache.set("dynamic_assignment", dynamic_assignment)
             team_cache.set("dynamic_time", current_time)
@@ -556,19 +550,6 @@ def strategy(state):
         assigned_pos = static_assignment.get(agent_ctrl.name)
         if assigned_pos is not None and current_pos != assigned_pos:
             target = agent_map.shortest_path_step(current_pos, assigned_pos, speed)
-
-    if PRINT_TURN_SUMMARY:
-        phase_label = "P2" if team_cache.get("phase2_active", False) else (
-            "P1-MOVE" if team_cache.get("positions_computed", False) else "P1-COMPUTE"
-        )
-        static_pos = static_assignment.get(agent_ctrl.name) if static_assignment else None
-        dynamic_assignment = team_cache.get("dynamic_assignment", {})
-        dynamic_pos = dynamic_assignment.get(agent_ctrl.name) if isinstance(dynamic_assignment, dict) else None
-        debug(
-            f"[{agent_ctrl.name}] t={current_time} phase={phase_label} "
-            f"pos={current_pos} target={target} static={static_pos} dynamic={dynamic_pos} "
-            f"attackers={dict(sorted(visible_attackers.items()))}"
-        )
 
     # ===== OUTPUT =====
     state["action"] = target

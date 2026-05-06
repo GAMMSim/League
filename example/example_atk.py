@@ -16,6 +16,15 @@ def strategy(state):
     speed: float = agent_ctrl.speed  # Movement speed (max nodes per turn)
     capture_radius: float = agent_ctrl.capture_radius  # Distance to capture flags
 
+    # ===== RULE CONFIG =====
+    rule_config = state["rule_config"]  # Read-only view of red_global, blue_global, environment
+    # Opponent (blue/defender) parameters
+    opp_tagging_radius: float = rule_config["blue_global"]["tagging_radius"]   # tagging interaction range
+    opp_sensing_radius: float = rule_config["blue_global"]["sensing_radius"]   # blue vision radius
+    # Environment (stationary sensor network)
+    stationary_radius: float = rule_config["environment"]["blue_stationary_sensor_radius"]
+    stationary_positions: list = rule_config["environment"]["blue_static_sensor_positions"]
+
     # ===== INDIVIDUAL CACHE =====
     cache = agent_ctrl.cache  # Per-agent storage, not shared with teammates
 
@@ -106,7 +115,7 @@ def strategy(state):
                 target = random.choice(neighbors)  # Move to first neighbor
 
     # ===== OUTPUT =====
-    state["action"] = target  # Required: set target node for this turn
+    state["action"] = current_pos  # Required: set target node for this turn
     
     # Return discovered flags for potential reward calculation
     return set(flags)

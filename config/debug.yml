@@ -36,42 +36,47 @@ agents:
     - stationary
   red_config:
     red_0:
-      start_node_id: 115
+      start_node_id: 58
     red_1:
-      start_node_id: 135
+      start_node_id: 50
     red_2:
-      start_node_id: 87
+      start_node_id: 145
     red_3:
-      start_node_id: 196
+      start_node_id: 47
     red_4:
-      start_node_id: 129
+      start_node_id: 149
   blue_config:
     blue_0:
-      start_node_id: 186
+      start_node_id: 76
     blue_1:
-      start_node_id: 193
+      start_node_id: 171
     blue_2:
-      start_node_id: 26
+      start_node_id: 143
     blue_3:
-      start_node_id: 159
+      start_node_id: 6
     blue_4:
-      start_node_id: 4
+      start_node_id: 27
 flags:
   real_positions:
-  - 36
+  - 62
+  - 170
+  - 78
   candidate_positions: &id001
-  - 36
-  - 199
+  - 96
+  - 72
+  - 62
+  - 170
+  - 78
 environment:
   graph_name: osm_200.pkl
   blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
 generator:
-  id: d1e0ad844d
-  ts: '2026-02-17 17:02:46'
+  id: ae7686185e
+  ts: '2026-02-16 01:55:24'
   cafl:
   - 12
-  - 2
+  - 5
   - normal_t
   - 2
   - 1

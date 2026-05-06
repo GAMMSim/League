@@ -58,6 +58,15 @@ class GameEngine:
         self.game_config = config.get("game", {})
         self.max_time = self.game_config.get("max_time", 1000)
 
+        # Filtered config view for strategies — references only, built once at init.
+        # Exposed to strategies via state["rule_config"] each turn.
+        _agents_cfg = config.get("agents", {})
+        self._rule_config = {
+            "red_global":  _agents_cfg.get("red_global", {}),
+            "blue_global": _agents_cfg.get("blue_global", {}),
+            "environment": config.get("environment", {}),
+        }
+
         # Payoff tracking
         self.red_payoff_accum = 0.0
         self.blue_payoff_accum = 0.0
@@ -86,6 +95,12 @@ class GameEngine:
         self._first_tag_time: Optional[int] = None
         self._first_capture_time: Optional[int] = None
         self._first_discover_time: Optional[int] = None
+
+        # Strategy wall-clock timing (accumulated per game)
+        self._red_strategy_time: float = 0.0
+        self._blue_strategy_time: float = 0.0
+        self._red_strategy_calls: int = 0
+        self._blue_strategy_calls: int = 0
 
     def _empty_step_payoff_breakdown(self) -> Dict[str, Dict[str, float]]:
         return {
@@ -135,6 +150,7 @@ class GameEngine:
         ctx: Optional[Any] = None,
         root_path: Optional[str] = None,
         log_name: Optional[str] = "result",
+        log_dir: Optional[str] = None,
         vis_engine_kind: Optional[Any] = None,
         record: bool = False,
         vis: bool = True,
@@ -167,8 +183,8 @@ class GameEngine:
                 engine_kind = getattr(gamms.visual.Engine, "NO_VIS", None)
             ctx = gamms.create_context(vis_engine=engine_kind, vis_kwargs=vis_kwargs)
             
-        # Create logger only if log_name is provided
-        logger = _Logger(log_name) if log_name is not None else None
+        # Create logger only if log_name is provided; write to log_dir if given
+        logger = _Logger(log_name, path=log_dir or "") if log_name is not None else None
         
         # Recording is independent of logging
         if record:
@@ -220,9 +236,12 @@ class GameEngine:
         red_strategy: Union[str, Any, None] = "test_atk",
         blue_strategy: Union[str, Any, None] = "test_def",
         log_name: Optional[str] = "test_result",
+        log_dir: Optional[str] = None,
         set_level: Optional["LogLevel"] = LogLevel.WARNING,
-        record: bool = False,
+        record_file: bool = False,
+        record_video: bool = False,
         vis: bool = True,
+        tiff_path: Optional[str] = None,
     ) -> "GameEngine":
         """
         One-liner runner that mirrors the old __main__ behavior but keeps the call-site clean.
@@ -230,11 +249,22 @@ class GameEngine:
         
         Args:
             log_name: Name for the log file. If None, no logging will occur.
-            record: If True, record the game session to a .ggr file. Recording is independent of logging.
+            record_file: If True, record the game session to a .ggr file. Recording is independent of logging.
+            record_video: If True, capture rendered frames in real time and export an MP4 to the repo root.
             vis: If True, use PYGAME visualization. If False, use NO_VIS mode.
         """
         # Lazily import loader/utilities here
         from lib.config.config_loader import ConfigLoader
+
+        def _video_name_from_json(json_filename: str) -> str:
+            stem = os.path.splitext(os.path.basename(json_filename))[0]
+            parts = stem.rsplit("_", 2)
+            if len(parts) == 3:
+                prefix, hash_part, timestamp = parts
+                is_hex_hash = len(hash_part) == 16 and all(ch in "0123456789abcdefABCDEF" for ch in hash_part)
+                if is_hex_hash and timestamp.isdigit():
+                    return f"{prefix}_{timestamp}.mp4"
+            return f"{stem}.mp4"
 
         if set_level is not None:
             set_log_level(set_level)
@@ -252,8 +282,9 @@ class GameEngine:
             ctx=None,
             root_path=None,
             log_name=log_name,
+            log_dir=log_dir,
             vis_engine_kind=None,
-            record=record,
+            record=record_file,
             vis=vis,
         )
 
@@ -262,6 +293,8 @@ class GameEngine:
 
         # Visuals
         engine.setup_game_visuals(config.get("agents", {}))
+        if tiff_path and engine.vis_engine:
+            engine.vis_engine.setup_map_overlay(tiff_path)
 
         # Strategies
         red_mod, blue_mod = cls.load_strategies(red_strategy, blue_strategy)
@@ -292,27 +325,121 @@ class GameEngine:
             except Exception as e:
                 warning(f"Failed to set logger metadata: {e}")
 
-        # Run
-        engine.run_game()
-        success(str(engine))  # prints nice summary via __str__
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        video_fps_raw = (config.get("visualization", {}) or {}).get("video_fps", 2)
+        try:
+            video_fps = float(video_fps_raw)
+            if video_fps <= 0:
+                raise ValueError("video_fps must be > 0")
+        except Exception:
+            warning(f"Invalid visualization.video_fps={video_fps_raw}; using default 2")
+            video_fps = 2.0
+        json_filename: Optional[str] = None
+        video_writer: Optional[Any] = None
+        video_temp_path: Optional[str] = None
+        video_method_name: Optional[str] = None
+        original_visual_method: Optional[Any] = None
 
-        if engine.logger:
-            # Make sure the target directory exists; avoids write errors in the logger
-            if hasattr(engine.logger, "path"):
+        if record_video:
+            if not vis:
+                warning("record_video=True ignored because vis=False.")
+            else:
                 try:
-                    os.makedirs(engine.logger.path, exist_ok=True)
-                except Exception:
-                    pass  # non-fatal; logger will throw if it truly cannot write
+                    import imageio.v2 as imageio
 
-            # Write a JSON log file (auto-generated name)
-            try:
-                fname = engine.logger.write_to_file(format="json")  # JSON ensures broad compatibility
+                    visual_obj = getattr(ctx, "visual", None)
+                    if visual_obj is None:
+                        warning("record_video=True but no visual object is available on context.")
+                    else:
+                        # Prefer per-render-frame hook when available. In GAMMS,
+                        # `simulate()` may run multiple internal animation frames;
+                        # patching `update()` captures those transitions.
+                        if hasattr(visual_obj, "update"):
+                            video_method_name = "update"
+                        elif hasattr(visual_obj, "simulate"):
+                            video_method_name = "simulate"
+                        else:
+                            video_method_name = None
+
+                        if video_method_name is None:
+                            warning("record_video=True but no compatible visual update method was found.")
+                        else:
+                            original_visual_method = getattr(visual_obj, video_method_name)
+                            video_temp_path = os.path.join(project_root, f".tmp_video_{int(time.time())}.mp4")
+                            video_writer = imageio.get_writer(video_temp_path, fps=video_fps)
+                            frame_capture_error_reported = False
+
+                            def _patched_visual_step() -> None:
+                                nonlocal frame_capture_error_reported
+                                original_visual_method()
+                                try:
+                                    img_data = ctx.visual._pygame.surfarray.array3d(ctx.visual._screen)
+                                    img_data = img_data.transpose([1, 0, 2])
+                                    video_writer.append_data(img_data)
+                                except Exception as e:
+                                    if not frame_capture_error_reported:
+                                        warning(f"Frame capture failed during video recording: {e}")
+                                        frame_capture_error_reported = True
+
+                            setattr(visual_obj, video_method_name, _patched_visual_step)
+                            success("Real-time video recording enabled")
+                except Exception as e:
+                    warning(f"Failed to start video recording: {e}")
+                    video_writer = None
+                    video_temp_path = None
+                    video_method_name = None
+                    original_visual_method = None
+
+        try:
+            # Run
+            engine.run_game()
+            success(str(engine))  # prints nice summary via __str__
+
+            if engine.logger:
+                # Make sure the target directory exists; avoids write errors in the logger
                 if hasattr(engine.logger, "path"):
-                    success(f"Log written to: {os.path.join(engine.logger.path, fname)}")
+                    try:
+                        os.makedirs(engine.logger.path, exist_ok=True)
+                    except Exception:
+                        pass  # non-fatal; logger will throw if it truly cannot write
+
+                # Write a JSON log file (auto-generated name)
+                try:
+                    fname = engine.logger.write_to_file(format="json")  # JSON ensures broad compatibility
+                    json_filename = fname
+                    if hasattr(engine.logger, "path"):
+                        success(f"Log written to: {os.path.join(engine.logger.path, fname)}")
+                    else:
+                        success(f"Log file: {fname}")
+                except Exception as e:
+                    warning(f"Failed to write log file: {e}")
+        finally:
+            if video_method_name and original_visual_method is not None:
+                try:
+                    setattr(ctx.visual, video_method_name, original_visual_method)
+                except Exception:
+                    pass
+
+            if video_writer is not None:
+                try:
+                    video_writer.close()
+                except Exception as e:
+                    warning(f"Failed to finalize video writer: {e}")
+
+            if video_temp_path and os.path.exists(video_temp_path):
+                if json_filename:
+                    video_filename = _video_name_from_json(json_filename)
+                elif log_name:
+                    video_filename = f"{log_name}_{int(time.time())}.mp4"
                 else:
-                    success(f"Log file: {fname}")
-            except Exception as e:
-                warning(f"Failed to write log file: {e}")
+                    video_filename = f"recording_{int(time.time())}.mp4"
+
+                video_output_path = os.path.join(project_root, video_filename)
+                try:
+                    os.replace(video_temp_path, video_output_path)
+                    success(f"Video written to: {video_output_path}")
+                except Exception as e:
+                    warning(f"Failed to write final video file: {e}")
         return engine
 
     # ---------- Original functionality (unchanged logic) ----------
@@ -410,12 +537,21 @@ class GameEngine:
                         "name": agent_name,
                         "agent_controller": agent_controller,
                         "team_cache": agent_controller.cache,
+                        "rule_config": self._rule_config,
                     }
                 )
 
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:
                     try:
+                        _t0 = time.perf_counter()
                         agent_controller.strategy(state)
+                        _dt = time.perf_counter() - _t0
+                        if agent_controller.team == "red":
+                            self._red_strategy_time += _dt
+                            self._red_strategy_calls += 1
+                        else:
+                            self._blue_strategy_time += _dt
+                            self._blue_strategy_calls += 1
                         action = state.get("action")
                         actions[agent_name] = action
                     except Exception as e:
@@ -616,10 +752,10 @@ class GameEngine:
         BLUE = (50, 50, 200)
         GREEN = (50, 180, 50)
 
-        for agent_name, _agent_team, flag_node in (capture_details or []):
+        for agent_name, _agent_team, flag_node, *_ in (capture_details or []):
             self.vis_engine.add_hud_event(f"{agent_name} captured Flag {flag_node}", GREEN)
 
-        for red_name, blue_name, outcome in (tagging_details or []):
+        for red_name, blue_name, outcome, *_ in (tagging_details or []):
             if "both" in outcome:
                 self.vis_engine.add_hud_event(f"{blue_name} tagged {red_name} ({outcome})", BLUE)
             elif "red" in outcome:
@@ -670,7 +806,7 @@ class GameEngine:
 
             # Visualize flag captures
             if self.vis_engine and capture_details:
-                for agent_name, agent_team, flag_node in capture_details:
+                for agent_name, agent_team, flag_node, *_ in capture_details:
                     self.vis_engine.mark_flag_captured(agent_name, agent_team, flag_node)
 
             red_payoff, blue_payoff = self.compute_payoff(step_red_caps, step_blue_caps, step_red_killed, step_blue_killed)
@@ -709,6 +845,10 @@ class GameEngine:
             self._first_tag_time = None
             self._first_capture_time = None
             self._first_discover_time = None
+            self._red_strategy_time = 0.0
+            self._blue_strategy_time = 0.0
+            self._red_strategy_calls = 0
+            self._blue_strategy_calls = 0
 
             info(f"Starting game with max time: {self.max_time}")
 
@@ -737,7 +877,7 @@ class GameEngine:
 
             # Visualize flag captures at t=0
             if self.vis_engine and capture_details:
-                for agent_name, agent_team, flag_node in capture_details:
+                for agent_name, agent_team, flag_node, *_ in capture_details:
                     self.vis_engine.mark_flag_captured(agent_name, agent_team, flag_node)
 
             red_payoff, blue_payoff = self.compute_payoff(init_red_caps, init_blue_caps, init_red_killed, init_blue_killed)

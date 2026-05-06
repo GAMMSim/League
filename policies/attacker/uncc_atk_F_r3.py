@@ -4,7 +4,25 @@ import numpy as np
 from collections import deque
 import math
 
+##############################################################
+#                     Helper Constants....
+##############################################################
+# Dictionary to store the Team Vsense...
+# _Vsense_global = {}
+# Radius for stationary sensor observation...
+R_GREEN = 450
+# Radius for attacker observation of flag...
+R_PROTECT_FLAG = 400
+# Radius for defender sensing...
+R_DEFENDER_SENSING = 250
+# Radius for attacker to capture the flag...
+R_BANNED = 2
+# Radius for tag for defender....
+R_TAG = 1
 
+##############################################################
+#                     Attacker Strategy....
+##############################################################
 def strategy(state):
     
     # ===== AGENT CONTROLLER =====
@@ -37,6 +55,9 @@ def strategy(state):
 
     team_cache.set("last_update", current_time)  # Track when team cache was last modified
     team_cache.update(total_captures=team_cache.get("total_captures", 0), formation="spread")  # Update team-wide statistics
+
+    if not team_cache.has('Vsense'):
+        team_cache.set("Vsense",{})
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
@@ -113,13 +134,20 @@ def strategy(state):
     # Getting the observation form the condidate flags...
     for flag in Vcand:
         vgreen_flag_i = _get_nodes_in_range([flag],R_GREEN,global_map_sensor)
-        _update_Vsense(str(flag),vgreen_flag_i)
-    # Getting the observation from the ememy agents...
+        # _update_Vsense(str(flag),vgreen_flag_i)
+        _update_cache_Vsense(team_cache,str(flag),vgreen_flag_i)
+
+    # Getting the observation from the enemy agents...
     for name in enemy_name:
-        venemy_sensing = _get_nodes_in_range([flag],R_DEFENDER_SENSING,global_map_sensor)
-        _update_Vsense(name,venemy_sensing)
+        venemy_sensing = _get_nodes_in_range(enemy_pos,R_DEFENDER_SENSING,global_map_sensor)
+        # _update_Vsense(name,venemy_sensing)
+        _update_cache_Vsense(team_cache,name,venemy_sensing)
+
     # Getting nodes that are observed by stationary flags and enemy sensoing nodes...
-    Vsense = _get_Vsense()
+    # Vsense = _get_Vsense()
+    Vsense = _get_cache_Vsense(team_cache)
+    # print(_Vsense_global)
+    # print(team_cache["Vsense"])
     # Getting the Vsense_boundary: Vsense frontier nodes...
     Vsense_boundary = _get_node_at_boundary(Vsense,global_map_sensor)
     # Getting the Vprotect:
@@ -135,18 +163,18 @@ def strategy(state):
     Vtag_set = set().union(*Vtag.values())
     # print(set().union(*Vtag.values()))
 
-    ##################################
-    # Strategy for attacker...
-    ##################################
+    #*****************************************************************
+    #**************** Strategy for attacker...************************
+    #*****************************************************************
     
     # Getting the attacker teammate position...
     teammate_position = [info[1] for info in teammates_data]
 
     # For each of the flag get Vgreen nodes set...
     Vgreen_dic = {i: None for i in Vcand}
-    for key in _Vsense_global.keys():
+    for key in team_cache["Vsense"].keys():
         if not key.startswith("blue_"):
-            Vgreen_dic[int(key)] = _Vsense_global[key]
+            Vgreen_dic[int(key)] = team_cache["Vsense"][key]
 
     # Take difference between the Vgreen and V protect for each agent...
     Vgreen_Vprotect_Area_dic = {i:None for i in Vcand}
@@ -173,7 +201,7 @@ def strategy(state):
     path_to_min_node = []
 
     # If current postion of attacker is not on the defender sensing(ego + stationaty) area...
-    if current_pos is not _get_Vsense():
+    if current_pos is not _get_cache_Vsense(team_cache):
         # Checking if attacker team is doing well...
         if red_payoff > blue_payoff:
             # Getting all the 1-hop neigbours of the attackers...
@@ -267,12 +295,16 @@ def strategy(state):
         # Getting the curent position index in the path list...
         curr_idx = path_to_min_node.index(state['curr_pos'])
         # If current position is goal/min_node don't move...
-        if state['curr_pos'] == min_node:
+        if state['curr_pos'] == path_to_min_node[-1]:
             target: int = current_pos
         # Else selecct the next postion in path to go...
         else:
             next_node = path_to_min_node[curr_idx+1]
-            target: int = next_node
+            if next_node in _k_hop_neighbors(global_map_sensor,state['curr_pos'],k=1):
+                target: int = next_node
+            else:
+                print('Error-Hoppped-Multiple Nodes')
+                target: int = current_pos
     # If path length is zero don't move...
     else:
         target: int = current_pos
@@ -300,36 +332,24 @@ def map_strategy(agent_config):
     return strategies
 
 
-##############################################################
-#                     Helper Constants....
-##############################################################
-
-# Dictionary to store the Team Vsense...
-_Vsense_global = {}
-# Radisu for stationary sensor observation...
-R_GREEN = 450
-# Radius for attacker observation of flag...
-R_PROTECT_FLAG = 400
-# Radius for defender sensing...
-R_DEFENDER_SENSING = 250
-# Radius for attacker to capture the flag...
-R_BANNED = 2
-# Radius for tag for defender....
-R_TAG = 1
-
 
 ##############################################################
 #                     Helper Routines....
 ##############################################################
 
-
 # Getting the dictinary updated...
-def _update_Vsense(agent,ego_nodes):
-    _Vsense_global[agent] = ego_nodes
+# def _update_Vsense(agent,ego_nodes):
+    # _Vsense_global[agent] = ego_nodes
+
+def _update_cache_Vsense(cache,agent,nodes):
+    cache["Vsense"][agent] = nodes
 
 # Getting the all the Vsense values...
-def _get_Vsense(dictionary_global=_Vsense_global):
-    return set().union(*dictionary_global.values())
+# def _get_Vsense(dictionary_global=_Vsense_global):
+#     return set().union(*dictionary_global.values())
+
+def _get_cache_Vsense(cache):
+    return set().union(*cache["Vsense"].values())
 
 # Function to get all the Vsense boundary points...
 def _get_node_at_boundary(vsense,global_map):
@@ -368,30 +388,24 @@ def _get_nodes_in_range_dict(flag_nodes: Iterable[int], radius: float, global_ma
         y = attrs.get("y")
         if x is not None and y is not None:
             coords[n] = (float(x), float(y))
-
     # Build per-flag sets
     flag_to_inrange: Dict[int, Set[int]] = {}
-
     r2 = radius * radius  # compare squared distances (faster)
     for flag in flag_nodes:
         if flag not in coords:
             flag_to_inrange[flag] = set()
             continue
-
         x0, y0 = coords[flag]
         inrange = set()
-
         for n, (x, y) in coords.items():
             dx = x - x0
             dy = y - y0
             if (dx * dx + dy * dy) <= r2:
                 inrange.add(n)
-
         flag_to_inrange[flag] = inrange
-
     return flag_to_inrange
 
-
+# Function to get the 'k-hop' neighbour nodes...
 def _k_hop_neighbors(G: nx.Graph, start: Hashable, k: int) -> Set[Hashable]:
     """
     Returns the set of nodes within <= k hops of `start` in an unweighted graph.
@@ -401,10 +415,8 @@ def _k_hop_neighbors(G: nx.Graph, start: Hashable, k: int) -> Set[Hashable]:
         return set()
     if start not in G:
         return set()
-
     visited = {start}
     q = deque([(start, 0)])  # (node, depth)
-
     while q:
         u, d = q.popleft()
         if d == k:
@@ -413,9 +425,9 @@ def _k_hop_neighbors(G: nx.Graph, start: Hashable, k: int) -> Set[Hashable]:
             if v not in visited:
                 visited.add(v)
                 q.append((v, d + 1))
-
     return visited
 
+# Function to get the set of 'k-hop' neighbour nodes for list/set of nodes...
 def _k_hop_neighbors_multi(G: nx.Graph, starts: Iterable[int], k: int) -> Set[int]:
     """
     Returns the union of nodes within <= k hops of ANY node in `starts`.
@@ -425,7 +437,7 @@ def _k_hop_neighbors_multi(G: nx.Graph, starts: Iterable[int], k: int) -> Set[in
         out |= _k_hop_neighbors(G, s, k)   # uses the single-source function you already have
     return out
 
-
+# Function to get 'k-hop' neighours dictionary where root node is key and neighbours are values...
 def _k_hop_neighbors_dict(G: nx.Graph, starts: Iterable[int], k: int) -> Dict[int, Set[int]]:
     """
     Returns:
@@ -440,6 +452,7 @@ def _k_hop_neighbors_dict(G: nx.Graph, starts: Iterable[int], k: int) -> Dict[in
             out[s] = set()
     return out
 
+# Function to get the number of hop from source/root to all the other targets and return it as dictionary...
 def _hops_to_targets(
     G: nx.Graph,
     source: int,
@@ -453,16 +466,14 @@ def _hops_to_targets(
     """
     targets = list(targets)
     target_set = set(targets)
-
     # Single-source shortest path lengths (BFS for unweighted graphs)
     lengths = nx.single_source_shortest_path_length(G, source)
-
     out = {}
     for t in targets:
         out[t] = lengths.get(t, unreachable_value)
     return out
 
-
+# Function to get the node with minimum hops from source to multiple target nodes...
 def _min_hop_target(
     G: nx.Graph,
     source: int,
@@ -477,7 +488,7 @@ def _min_hop_target(
         return None, float("inf")
     return best_t, float(best_h)
 
-
+# Function to get the n-th minimum hop to target from list of targets...
 def _nth_min_hop_target(
     G: nx.Graph,
     source: int,
@@ -491,17 +502,13 @@ def _nth_min_hop_target(
     """
     if n <= 0:
         raise ValueError("n must be >= 1")
-
     hop_dict = _hops_to_targets(G, source, targets, unreachable_value=float("inf"))
-
     # keep only reachable
     reachable = [(t, h) for t, h in hop_dict.items() if math.isfinite(h)]
     if len(reachable) < n:
         return None, float("inf")
-
     # sort by (hop, target_id) for deterministic tie-breaking
     reachable.sort(key=lambda x: (x[1], x[0]))
-
     t, h = reachable[n - 1]
     return t, float(h)
 

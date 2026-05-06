@@ -34,13 +34,13 @@ class InteractionEngine:
         self._processed: Set[str] = set()
         self._red_killed = 0
         self._blue_killed = 0
-        self._capture_details: List[Tuple[str, str, Any]] = []  # (agent_name, team, flag_node)
-        self._tagging_details: List[Tuple[str, str, str]] = []  # (red_name, blue_name, outcome)
+        self._capture_details: List[Tuple[str, str, Any, int]] = []  # (agent_name, team, flag_node, agent_pos)
+        self._tagging_details: List[Tuple[str, str, str, int, int]] = []  # (red_name, blue_name, outcome, red_pos, blue_pos)
         debug("InteractionEngine initialized")
 
     # ------------------------------ Public API ------------------------------
 
-    def step(self, time: int) -> Tuple[int, int, int, int, int, int, List[Tuple[str, str, Any]], List[Tuple[str, str, str]], Set[int]]:
+    def step(self, time: int) -> Tuple[int, int, int, int, int, int, List[Tuple[str, str, Any, int]], List[Tuple[str, str, str, int, int]], Set[int]]:
         """
         Resolve one timestep of interactions.
 
@@ -74,7 +74,7 @@ class InteractionEngine:
         remaining_blue = sum(1 for a in self.ctx.agent.create_iter() if getattr(a, "team", "") == "blue")
 
         debug(f"Timestep {time} complete: {red_caps} red captures, {blue_caps} blue captures, {self._red_killed} red killed, {self._blue_killed} blue killed")
-        return (red_caps, blue_caps, self._red_killed, self._blue_killed, remaining_red, remaining_blue, self._capture_details, self._tagging_details, discovered)
+        return (red_caps, blue_caps, self._red_killed, self._blue_killed, remaining_red, remaining_blue, list(self._capture_details), list(self._tagging_details), discovered)
 
     # --------------------------- Capture resolution --------------------------
 
@@ -124,8 +124,9 @@ class InteractionEngine:
             cr = getattr(ctrl, "capture_radius", 0)
             if dist <= cr:
                 info(f"{agent_team.title()} {agent.name} captured {flag_team} flag {flag_node} at t={time}")
+                agent_pos = agent.current_node_id  # save position before kill
                 if self._handle_interaction(agent, self._capture_action(), "capture"):
-                    self._capture_details.append((agent.name, agent_team, flag_node))
+                    self._capture_details.append((agent.name, agent_team, flag_node, agent_pos))
                     success(f"{agent_team.title()} {agent.name} successfully captured {flag_team} flag {flag_node}")
                     captures += 1
         return captures
@@ -182,8 +183,10 @@ class InteractionEngine:
                     continue
                 if self._agents_in_tagging_range(r, b):
                     debug(f"Combat between {r.name} and {b.name}")
+                    r_pos = r.current_node_id  # save positions before kill
+                    b_pos = b.current_node_id
                     outcome = self._resolve_original_combat(r, b)
-                    self._tagging_details.append((r.name, b.name, outcome))
+                    self._tagging_details.append((r.name, b.name, outcome, r_pos, b_pos))
                     combat_count += 1
                     # after a resolution, one/both may be processed; move to next red
                     if r.name in self._processed:
@@ -341,8 +344,8 @@ class InteractionEngine:
         if game_rule == "v2":
             red_flags = flags.get("red_flag_positions", [])
             blue_flags = flags.get("blue_flag_positions", [])
-        elif game_rule == "v1.2":
-            debug(f"Using game rule v1.2; interpreting 'real_positions' as blue flags and no red flags")
+        elif game_rule in ("v1.2", "test"):
+            debug(f"Using game rule {game_rule}; interpreting 'real_positions' as blue flags and no red flags")
             red_flags = []
             blue_flags = flags.get("real_positions", [])
         return red_flags, blue_flags

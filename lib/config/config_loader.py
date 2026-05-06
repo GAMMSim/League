@@ -1,6 +1,7 @@
-from typing import Dict, Any, Optional, Union, List, Set
+from typing import Dict, Any, Optional, Union, List, Set, Tuple
 from typeguard import typechecked
 from pathlib import Path
+import os
 import yaml
 
 try:
@@ -11,6 +12,31 @@ except ImportError:
     from lib.core.console import *
     from lib.config.distribution import *
     from lib.config.config_utils import recursive_update
+
+# Process-wide YAML parse cache. Keyed by (resolved_path, mtime_ns, size).
+# Stores a deep-copy-safe parsed dict so each caller gets an independent copy.
+_YAML_PARSE_CACHE: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
+
+
+def _load_yaml_cached(path: Path) -> Dict[str, Any]:
+    """Load a YAML file, returning a cached result if the file is unchanged."""
+    import copy
+    try:
+        stat = os.stat(path)
+        key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        key = None
+
+    if key is not None and key in _YAML_PARSE_CACHE:
+        return copy.deepcopy(_YAML_PARSE_CACHE[key])
+
+    with open(path, "r") as f:
+        data = yaml.safe_load(f) or {}
+
+    if key is not None:
+        _YAML_PARSE_CACHE[key] = copy.deepcopy(data)
+
+    return data
 
 
 @typechecked
@@ -34,10 +60,9 @@ class ConfigLoader:
             raise FileNotFoundError(f"Config file '{self.input_path}' not found")
 
     def _load_config(self):
-        """Load configuration from YAML file."""
+        """Load configuration from YAML file (cached by path+mtime)."""
         try:
-            with open(self.input_path, "r") as f:
-                self.config_data = yaml.safe_load(f) or {}
+            self.config_data = _load_yaml_cached(self.input_path)
             success(f"Config loaded successfully from {self.input_path}")
         except Exception as e:
             error(f"Failed to load config file '{self.input_path}': {e}")
@@ -59,8 +84,7 @@ class ConfigLoader:
             return
 
         try:
-            with open(extra_file_path, "r") as f:
-                extra_data = yaml.safe_load(f) or {}
+            extra_data = _load_yaml_cached(extra_file_path)
         except Exception as e:
             warning(f"Failed to load extra config file '{extra_file_path}': {e}")
             return

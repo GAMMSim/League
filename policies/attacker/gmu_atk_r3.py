@@ -16,13 +16,13 @@ def attacker_strategy(state):
     # ===== CONFIGURATION =====
     DEFAULT_DEFENDER_SPEED = 1
     DEFAULT_DEFENDER_TAG_RADIUS = 1
-    DEFAULT_STATIONARY_SENSE_RADIUS = 450
-    DEFAULT_DEFENDER_SENSE_RADIUS = 250
+    DEFAULT_STATIONARY_SENSE_RADIUS = 1
+    DEFAULT_DEFENDER_SENSE_RADIUS = 30
     STRICT_NO_ENTER_HOPS = 2
     N_WIN_WEIGHT_K = 1.0
     N_WIN_WEIGHT_K_LATE = 0.5
-    N_WIN_WEIGHT_SWITCH_T = 100
-    RENDEZVOUS_TIMEOUT_T = 40
+    N_WIN_WEIGHT_SWITCH_T = 40
+    RENDEZVOUS_TIMEOUT_T = 3
     # RENDEZVOUS_TIMEOUT_T = 75
 
     # ===== INITIALIZATION =====
@@ -622,6 +622,7 @@ def attacker_strategy(state):
             meeting_point = team_cache.get("meeting_point", None)
 
         if meeting_point is None:
+            debug(f"[t={current_time}][{agent_name}] RENDEZVOUS: no safe meeting point available, holding in place")
             state["action"] = current_pos
             return discovered_flags
 

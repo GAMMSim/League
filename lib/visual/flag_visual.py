@@ -69,7 +69,7 @@ class FlagVisual:
             flag_size = self.sizes.get("flag_size", 15)
 
             # Logic for v1.2: Real (green) vs. Fake (gray) flags
-            if game_rule == "v1.2":
+            if game_rule in ("v1.2", "test"):
                 # Define colors for real and fake flags
                 try:
                     from gamms.VisualizationEngine import Color
@@ -200,17 +200,32 @@ class FlagVisual:
         flag_color = data.get("color", (255, 0, 0))
         pole_color = data.get("pole_color", (0, 0, 0))
 
-        # Flag dimensions
-        flag_width = data.get("flag_width", 15)
+        # All dimensions are in screen pixels
+        flag_width  = data.get("flag_width",  15)
         flag_height = data.get("flag_height", 10)
         pole_height = data.get("pole_height", 20)
-        pole_width = 2
+        pole_width  = 2
 
-        # Draw flag pole (vertical rectangle)
-        ctx.visual.render_rectangle(x - pole_width // 2, y + pole_height * 1.8, pole_width, pole_height, pole_color)
+        # Convert node world position to screen coords once
+        render_manager = ctx.visual._render_manager
+        sx, sy = render_manager.world_to_screen(x, y)
 
-        # Draw flag (rectangle attached to pole top)
-        ctx.visual.render_rectangle(x, y + pole_height * 1.8, flag_width, flag_height, flag_color)
+        try:
+            import pygame
+            layer = render_manager.current_drawing_artist.get_layer()
+            surface = ctx.visual._get_target_surface(layer)
+
+            # Pole: centered on sx, rising upward from the node (sy - pole_height to sy)
+            pole_rect = pygame.Rect(sx - pole_width // 2, sy - pole_height, pole_width, pole_height)
+            pygame.draw.rect(surface, pole_color, pole_rect)
+
+            # Flag banner: attached to the top of the pole, extending right
+            flag_rect = pygame.Rect(sx, sy - pole_height, flag_width, flag_height)
+            pygame.draw.rect(surface, flag_color, flag_rect)
+
+        except Exception as e:
+            # Fallback: just draw a circle at the node position
+            ctx.visual.render_circle(x, y, 2, flag_color)
 
     def mark_flag_captured(self, agent_name: str, agent_team: str, flag_node: int) -> None:
         """

@@ -14,7 +14,7 @@ def defender_strategy(state):
     
     # ===== CONFIGURATION (HARDCODED VALUES) =====
     # Vision parameters
-    DEFAULT_STATIONARY_SENSE_RADIUS = 450   # Radius for Flags/Stationary sensors
+    DEFAULT_STATIONARY_SENSE_RADIUS = 1   # Radius for Flags/Stationary sensors
                                             # MODIFY THIS based on game rules!
     
     # Assumptions about enemy capabilities (used if not found in cache)

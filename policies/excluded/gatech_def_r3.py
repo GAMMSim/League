@@ -1,11 +1,14 @@
+from Game_Generation import TADGamePrimitives
 import networkx as nx
-from scipy.optimize import linprog
+
+from solver import NashSolver
+from nash_utils import linprog_solve
+import pickle
 import os
 import numpy as np
 import itertools
 import multiprocessing as mp
 from scipy.optimize import linear_sum_assignment
-
 
 att_policy_1v1_defender = None
 def_policy_1v1_defender = None
@@ -188,95 +191,6 @@ def filter_active_agents(attacker_dict, defender_dict,real_flag_nodes,candidate_
             surviving_def[d_name] = d_pos
     return surviving_att, surviving_def, captured_attackers, capturing_defenders, flag_reached,candidate_flag_reached
 
-def linprog_solve(reward_matrix: np.ndarray,
-                  precision: int = 4,
-                  rng: np.random.Generator | None = None) -> (float, np.ndarray, np.ndarray):
-    """
-    :param reward_matrix: M x N matrix. The entry of the jointly selected row and column
-                          represents the winnings of the row player and the loss of the
-                          column player (row maximizes, column minimizes).
-    :param precision: precision of the matrix solver
-    :param rng: optional numpy random generator; if None, uses default_rng()
-    :return: (value of the game, optimal row policy, optimal column policy)
-    """
-
-    if rng is None:
-        rng = np.random.default_rng()
-
-    reward_matrix = -np.nan_to_num(np.round(reward_matrix, precision))
-    m, n = reward_matrix.shape
-
-    # Early-out if zero matrix: just play uniform
-    if np.allclose(reward_matrix, 0):
-        return 0.0, np.ones(m) / m, np.ones(n) / n
-
-    # ========== Build LP for column player ==========
-    # decision vars: y_1,...,y_n, v
-    # minimize -v  (C = [0,...,0,-1])
-    C = [0.0] * n + [-1.0]
-
-    # constraints: reward_matrix[i_row, :] @ y >= v  for all rows
-    # => -reward_matrix[i_row, :] @ y + v <= 0
-    A = []
-    B = []
-    for i_row in range(m):
-        col = reward_matrix[i_row, :]
-        constraint_row = [-float(item) for item in col] + [1.0]
-        A.append(constraint_row)
-        B.append(0.0)
-
-    # equality: sum_j y_j = 1
-    A_eq_row = [1.0] * n + [0.0]
-    A_eq = [A_eq_row]
-    B_eq = [1.0]
-
-    # bounds: 0 <= y_j <= 1, v free
-    bounds = [(0.0, 1.0)] * n + [(None, None)]
-
-    res = linprog(C, A_ub=A, b_ub=B, A_eq=A_eq, b_eq=B_eq,
-                  bounds=bounds, method='highs')
-
-    # ========== Handle failure: random fallback ==========
-    if res is None or not res.success:
-        print("WARNING: LP failed. Returning random policies. Status:", res)
-        policy_row = rng.dirichlet(np.ones(m))
-        policy_col = rng.dirichlet(np.ones(n))
-        game_value = 0.0
-        return game_value, policy_row, policy_col
-
-    # ========== Column policy from primal ==========
-    policy_col = np.array(res.x[:-1], dtype=float)
-    policy_col[policy_col < 0] = 0.0
-    sum_col = policy_col.sum()
-
-    if sum_col <= 0 or not np.isfinite(sum_col):
-        # fallback: random policy
-        policy_col = rng.dirichlet(np.ones(n))
-    else:
-        policy_col /= sum_col
-
-    # ========== Row policy from dual ==========
-    # res.ineqlin.marginals are duals for A_ub * x <= b_ub
-    if not hasattr(res, "ineqlin") or res.ineqlin is None:
-        # fallback if duals not available
-        policy_row = rng.dirichlet(np.ones(m))
-    else:
-        policy_row = -np.array(res.ineqlin.marginals, dtype=float)
-        policy_row[policy_row < 0] = 0.0
-        sum_row = policy_row.sum()
-
-        if sum_row <= 0 or not np.isfinite(sum_row):
-            # fallback: random policy
-            policy_row = rng.dirichlet(np.ones(m))
-        else:
-            policy_row /= sum_row
-
-    # NOTE: depending on your sign convention, you might want -res.fun here.
-    game_value = res.fun
-
-    return game_value, policy_row, policy_col
-
-
 _G = {}
 def _init_worker(neighbors_cache,candidate_flags,real_flags,n_nodes, k, gamma,sp_cache,capture_radius,atk_names, def_names, att_act, def_act):
 
@@ -377,6 +291,39 @@ def run_mcts(attacker, defender,mamcts,real_flags,capture_rad,depth=2,for_attack
     best_def = {name: pos for name, pos in zip(def_names, def_acts[def_idx])}
 
     return best_att,best_def,root,att_policy,def_policy,q_matrix
+
+
+POLICY_DIR = "policy_files"
+os.makedirs(POLICY_DIR, exist_ok=True)
+
+def get_or_solve_policy(graph, flags,n_defenders,capture_radius):
+    """
+    Check if policy exists for this graph+flags, else solve and save.
+    """
+    flag = sorted(flags)
+    flags = [int(x) for x in flag]
+    fname = f"defenders_{graph}_F{flags}_{n_defenders}.pkl"
+    fpath = os.path.join(POLICY_DIR, fname)
+
+    if os.path.exists(fpath):
+        print(" Primitive Policy exists for this graph+flags! loading them")
+        with open(fpath, "rb") as f:
+            atk_policy, def_policy, value = pickle.load(f)
+        return atk_policy, def_policy, value
+    else:
+        print("Primitive Policy doesn't exist for this graph+flags solving the game")
+        game = TADGamePrimitives(graph=graph, goal_positions=flags,num_attackers = 1, num_defenders=n_defenders,capture_radius=capture_radius)
+        game.generate_compressed_transitions()
+        solver = NashSolver(game=game)
+        solver.solve(eps=1, n_policy_eval=7, n_workers=6,save_path=None, save_checkpoint=False, verbose=True)
+        att_policy_1v1_defender = solver.policy_1
+        def_policy_1v1_defender = solver.policy_2
+        value = solver.V
+
+        with open(fpath, "wb") as f:
+            pickle.dump([att_policy_1v1_defender,def_policy_1v1_defender, value], f)
+
+        return att_policy_1v1_defender, def_policy_1v1_defender, value
 
 def strategy(state):
     global att_policy_1v1_defender, def_policy_1v1_defender, V_1v1_defender, mamcts_defender, last_time
@@ -562,19 +509,10 @@ def strategy(state):
     current_position = current_pos
 
     if time == 1:
-        flags_sorted = sorted([int(f) for f in real_flags])
-        fname = f"defenders_{global_map_sensor}_F{flags_sorted}.npz"
-        POLICY_DIR = os.path.join(os.path.dirname(__file__), "primitives_policies")
-        fpath = os.path.join(POLICY_DIR, fname)
-        if not os.path.exists(fpath):
-            raise FileNotFoundError(
-                f"Primitive policy file '{fname}' not found in {POLICY_DIR}. "
-                f"Please run primitives_solver.py first with flags={flags_sorted}."
-            )
-        data = np.load(fpath, allow_pickle=True)
-        att_policy_1v1_defender = list(data['att_policy'])
-        def_policy_1v1_defender = list(data['def_policy'])
-        V_1v1_defender = data['value']
+        ap, dp, value = get_or_solve_policy(global_map_sensor, real_flags, 1, 2)
+        att_policy_1v1_defender = ap
+        def_policy_1v1_defender = dp
+        V_1v1_defender = value
         mamcts_defender = MultiAgentMCTS(graph=global_map_sensor, candidate_flag_nodes=real_flags + fake_flags, k=0.5)
 
 
@@ -614,7 +552,6 @@ def strategy(state):
     # NEW Added in the new round : threshold for "few attackers" -> hybrid chase + coverage
     FEW_ATK_RATIO = 0.5
     few_attackers = (num_atk > 0) and (num_atk < FEW_ATK_RATIO * max(1, num_def))
-    #print(few_attackers)
 
     # 1) If enough attackers are detected => full MCTS (your original behavior)
     if num_atk > 0 and not few_attackers:
@@ -645,13 +582,12 @@ def strategy(state):
     available_actions = list(agent_map.graph.neighbors(current_pos))
     sp = mamcts_defender.sp_cache
 
-
     if few_attackers:
         # Hybrid: choose a small chase-team, rest cover flags
         atk_nodes = list(attackers_detected_at_time_t.values())
         chase_team = choose_chase_team(defenders, atk_nodes, sp_cache=sp, chase_count=min(num_def, 2 * num_atk))
         chase_defenders = {name: defenders[name] for name in chase_team}
-        left_defenders = { name:defenders[name] for name in defenders if name not in chase_team }
+        left_defenders = {name: defenders[name] for name in defenders if name not in chase_team}
         flag_assignment = assign_defenders_to_flags(left_defenders, real_flags, sp_cache=sp, load_penalty=3.0)
 
         if agent_ctrl.name in chase_team:

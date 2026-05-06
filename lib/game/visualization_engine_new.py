@@ -1,14 +1,16 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from typeguard import typechecked
 
 try:
     from lib.core.console import *
     from lib.visual.agent_visual import AgentVisual
     from lib.visual.flag_visual import FlagVisual
+    from lib.visual.map_overlay_visual import MapOverlayVisual
 except ImportError:
     from ..core.console import *
     from ..visual.agent_visual import AgentVisual
     from ..visual.flag_visual import FlagVisual
+    from ..visual.map_overlay_visual import MapOverlayVisual
 
 
 @typechecked
@@ -118,19 +120,12 @@ class VisEngine:
         try:
             debug("Setting up base visualization")
             # Import color constants
-            try:
-                from gamms.VisualizationEngine import Color
-
-                default_node_color = Color.Black
-                edge_color = Color.Gray
-
-            except ImportError:
-                # Fallback colors
-                default_node_color = "black"
-                edge_color = "gray"
-
             # Set base graph visualization
-            self.ctx.visual.set_graph_visual(draw_id=self.draw_node_id, node_color=default_node_color, edge_color=edge_color, node_size=6)
+            node_size = self.sizes.get("node_size", 6)
+            edge_width = self.sizes.get("edge_width", 1)
+            node_color = self.colors.get("node_color", (0, 0, 0))
+            edge_color = self.colors.get("edge_color", (169, 169, 169))
+            self.ctx.visual.set_graph_visual(draw_id=self.draw_node_id, node_color=node_color, edge_color=edge_color, node_size=node_size, edge_width=edge_width)
 
             # Set game speed
             if hasattr(self.ctx.visual, "_sim_time_constant"):
@@ -262,6 +257,25 @@ class VisEngine:
     def is_visualization_enabled(self) -> bool:
         """Check if visualization is enabled/available."""
         return hasattr(self.ctx, "visual") and self.ctx.visual is not None
+
+    # -------------------- Map overlay --------------------
+
+    def setup_map_overlay(self, tiff_path: Optional[str]) -> None:
+        """Load a GeoTIFF and register it as a background layer (layer=5).
+
+        The TIFF must be in the same UTM CRS as the graph node coordinates.
+        Requires rasterio, numpy, and pygame to be installed.
+
+        Args:
+            tiff_path: Absolute or relative path to the .tif/.tiff file.
+                       If None or empty, this is a no-op.
+        """
+        if not tiff_path:
+            return
+        try:
+            MapOverlayVisual(self.ctx, tiff_path, tuple(self.window_size))
+        except Exception as e:
+            warning(f"Map overlay not loaded: {e}")
 
     # -------------------- HUD --------------------
 

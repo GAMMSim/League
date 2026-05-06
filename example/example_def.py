@@ -15,6 +15,15 @@ def strategy(state):
     speed: float = agent_ctrl.speed
     tagging_radius: float = agent_ctrl.tagging_radius
 
+    # ===== RULE CONFIG =====
+    rule_config = state["rule_config"]  # Read-only view of red_global, blue_global, environment
+    # Opponent (red/attacker) parameters
+    opp_capture_radius: float = rule_config["red_global"]["capture_radius"]    # flag capture range
+    opp_sensing_radius: float = rule_config["red_global"]["sensing_radius"]    # red vision radius
+    # Environment (stationary sensor network)
+    stationary_radius: float = rule_config["environment"]["blue_stationary_sensor_radius"]
+    stationary_positions: list = rule_config["environment"]["blue_static_sensor_positions"]
+
     # ===== INDIVIDUAL CACHE =====
     cache = agent_ctrl.cache
 

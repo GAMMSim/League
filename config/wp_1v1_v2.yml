@@ -1,6 +1,6 @@
 game:
-  game_rule: v1.2
-  max_time: 200
+  game_rule: test
+  max_time: 300
   interaction_model:
     tagging: both_kill
     capture: kill
@@ -16,7 +16,7 @@ agents:
   red_global:
     speed: 1
     capture_radius: 2
-    sensing_radius: 350
+    sensing_radius: 20
     sensors:
     - global_map
     - candidate_flag
@@ -26,7 +26,7 @@ agents:
   blue_global:
     speed: 1
     tagging_radius: 1
-    sensing_radius: 300
+    sensing_radius: 30
     sensors:
     - global_map
     - custom_team
@@ -36,46 +36,19 @@ agents:
     - stationary
   red_config:
     red_0:
-      start_node_id: 125
+      start_node_id: 38
   blue_config:
     blue_0:
-      start_node_id: 11
+      start_node_id: 0
 flags:
   real_positions:
-  - 183
-  - 26
-  - 11
+  - 0
   candidate_positions: &id001
-  - 183
-  - 26
-  - 11
-  - 199
-  - 5
-environment:
-  graph_name: osm_200.pkl
-  blue_stationary_sensor_radius: 450
-  blue_static_sensor_positions: *id001
-generator:
-  id: d321c0101e
-  ts: '2026-02-17 17:02:44'
-  cafl:
-  - 12
-  - 5
-  - normal_t
-  - 2
-  - 1
-  - 1.0
-  reag:
-  - 12
-  - 1
-  - normal_t
+  - 0
   - 10
-  - 2
-  - 1
-  blag:
-  - 12
-  - 1
-  - normal_t
-  - 3
-  - 1
-  - 1
+  - 24
+environment:
+  graph_name: wp_range16_0414.pkl
+  blue_stationary_sensor_radius: 1
+  blue_static_sensor_positions: *id001
+generator: {}

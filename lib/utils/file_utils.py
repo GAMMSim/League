@@ -6,6 +6,11 @@ import pickle
 import yaml
 import os
 
+# Process-wide graph cache. Keyed by source_token (path:mtime_ns:size).
+# Safe to share: graph topology is read-only during simulation; only graph.graph
+# metadata (APSP cache annotations) is written, which is shared intentionally.
+_GRAPH_OBJECT_CACHE: Dict[str, nx.MultiDiGraph] = {}
+
 try:
     from lib.core.console import *
     from lib.utils.graph_utils import cast_to_multidigraph, convert_gml_to_multidigraph
@@ -317,20 +322,30 @@ def export_graph_generic(filename: str) -> nx.MultiDiGraph:
         error(f"Graph file does not exist at {filename}.")
         raise FileNotFoundError(f"Graph file does not exist at {filename}.")
 
-    # Check the file extension
+    # Build source token to check process-wide cache before loading from disk
+    try:
+        stat = os.stat(filename)
+        source_token = f"{str(Path(filename).resolve())}:{stat.st_mtime_ns}:{stat.st_size}"
+    except Exception:
+        source_token = None
+
+    if source_token is not None and source_token in _GRAPH_OBJECT_CACHE:
+        debug(f"Graph cache hit: {filename}")
+        return _GRAPH_OBJECT_CACHE[source_token]
+
+    # Load from disk
     file_extension = os.path.splitext(filename)[1].lower()
     if file_extension == ".gml":
         graph = export_graph_gml(filename)
-        _annotate_graph_source(graph, filename)
-        return graph
     elif file_extension == ".pkl":
         graph = export_graph_pkl(filename)
-        _annotate_graph_source(graph, filename)
-        return graph
     elif file_extension == ".json":
         graph = export_graph_dsg(filename)
-        _annotate_graph_source(graph, filename)
-        return graph
     else:
         error(f"Unsupported graph file format: {file_extension}. Supported formats are .gml, .pkl, and .json.")
         raise Exception(f"Unsupported graph file format: {file_extension}. Supported formats are .gml, .pkl, and .json.")
+
+    _annotate_graph_source(graph, filename)
+    if source_token is not None:
+        _GRAPH_OBJECT_CACHE[source_token] = graph
+    return graph

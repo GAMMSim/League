@@ -5,15 +5,20 @@ visualization:
   window_size: [3008, 1692]         # Window width and height in pixels
   game_speed: 0.5                     # Speed multiplier for game visualization
   video_fps: 20                        # Output FPS for record_video MP4 files
-  draw_node_id: false               # Whether to display node IDs on visualization
+  draw_node_id: true               # Whether to display node IDs on visualization
   visualization_engine: "PYGAME"   # Visualization backend to use
   sizes:
-    flag_size: 18
-    global_agent_size: 13
+    flag_size: 40
+    global_agent_size: 2
+    node_size: 1
+    edge_width: 3
+  colors:
+    node_color: [0, 0, 0]          # RGB: black
+    edge_color: [169, 169, 169]    # RGB: gray
 
   # Label settings
-  label_y_offset: -15               # Shared y offset for moving labels, dead labels, and flag-capture labels (world coords)
-  label_spacing: 30                 # Shared vertical spacing for overlapping/stacked labels (world coords)
+  label_y_offset: -1               # Shared y offset for moving labels, dead labels, and flag-capture labels (world coords)
+  label_spacing: 2                 # Shared vertical spacing for overlapping/stacked labels (world coords)
 
   # HUD overlay — event log and payoff breakdown rendered at fixed screen position
   hud:
@@ -30,10 +35,10 @@ visualization:
 agents:
   red_global:
     color: "red"
-    size: 13
+    size: 2
   blue_global:
     color: "blue"
-    size: 13
+    size: 2
 
 game:
   max_time: 100

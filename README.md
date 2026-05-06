@@ -23,7 +23,8 @@ result = GameEngine.launch_from_files(
     red_strategy="policies.attacker.gatech_atk_r3",
     blue_strategy="policies.defender.gatech_def_r3",
     log_name=None,
-    record=False,
+    record_file=False,
+    record_video=False,
     vis=True,
 )
 ```
@@ -33,8 +34,10 @@ result = GameEngine.launch_from_files(
 - `red_strategy`: Python module path for attacker strategy.
 - `blue_strategy`: Python module path for defender strategy.
 - `log_name`: Set `None` to disable logging, or a string to save logs.
-- `record`: `True` to record a game file.
+- `record_file`: `True` to record a `.ggr` game file.
+- `record_video`: `True` to capture a real-time MP4 video.
 - `vis`: `True` for visualization, `False` for headless/no-visual mode.
+- `visualization.video_fps` (in `config/game_config.yml`): output FPS for recorded MP4s.
 
 ## 3. Strategy modules (important)
 
@@ -93,4 +96,3 @@ Use `example/example_config.yml` as a starting point. Main sections:
 - Import error for strategy: module path is wrong (must be Python import path, not file path).
 - Agents not moving: strategy did not set `state["action"]`, or target is invalid/out of speed range.
 - No visuals: check `vis=True` and keep `extra_defs="config/game_config.yml"`.
-
