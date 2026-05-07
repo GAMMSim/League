@@ -541,11 +541,40 @@ class GameEngine:
                     }
                 )
 
+                # Pre-split agent-type sensor payloads into enemies/teammates so
+                # strategies never need to do color-string filtering themselves.
+                se = self.agent_engine.sensor_engine
+                sensors = state.get("sensor", {})
+                if se is not None and se.agent_type_sensor_names:
+                    enemy_team = agent_controller.enemy_team
+                    own_team = agent_controller.team
+                    for sname in se.agent_type_sensor_names:
+                        if sname in sensors:
+                            sid, payload = sensors[sname]
+                            if isinstance(payload, dict):
+                                sensors[sname] = (sid, {
+                                    "enemies": {n: p for n, p in payload.items() if n.startswith(enemy_team)},
+                                    "teammates": {n: p for n, p in payload.items() if n.startswith(own_team)},
+                                })
+
+                # Consolidate all stationary_* sensor payloads into a single list
+                # under state["sensor"]["stationary"] so strategies need no loop.
+                stationary = [
+                    sensors[sname][1]
+                    for sname in sensors
+                    if sname.startswith("stationary_")
+                ]
+                if stationary:
+                    sensors["stationary"] = (None, stationary)
+
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:
                     try:
                         _t0 = time.perf_counter()
-                        agent_controller.strategy(state)
+                        _result = agent_controller.strategy(state)
                         _dt = time.perf_counter() - _t0
+                        if not isinstance(_result, str):
+                            raise TypeError(f"strategy must return str, got {type(_result).__name__}")
+                        info(f"[t={self.time_counter}][{agent_name}] {_result}")
                         if agent_controller.team == "red":
                             self._red_strategy_time += _dt
                             self._red_strategy_calls += 1
@@ -553,6 +582,8 @@ class GameEngine:
                             self._blue_strategy_time += _dt
                             self._blue_strategy_calls += 1
                         action = state.get("action")
+                        if not isinstance(action, int):
+                            raise TypeError(f"strategy must set state['action'] to int, got {type(action).__name__}")
                         actions[agent_name] = action
                     except Exception as e:
                         error(f"Strategy execution failed for {agent_name}: {e}")

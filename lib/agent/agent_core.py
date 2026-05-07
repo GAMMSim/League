@@ -66,6 +66,28 @@ class AgentController:
         return self.gamms_agent.name
 
     @property
+    def enemy_team(self) -> str:
+        """Return the opposing team name."""
+        return "blue" if self.team == "red" else "red"
+
+    def sensor_data(self, state: Dict[str, Any], sensor_name: str) -> Optional[Any]:
+        """Return the data payload for a named sensor, or None if the sensor is absent."""
+        entry = state.get("sensor", {}).get(sensor_name)
+        return entry[1] if entry is not None else None
+
+    def get_team(self, key: str, default: Optional[Any] = None) -> Any:
+        """Get a value from the shared team cache."""
+        return self.team_cache.get(key, default)
+
+    def set_team(self, key: str, value: Any) -> None:
+        """Set a value in the shared team cache."""
+        self.team_cache.set(key, value)
+
+    def update_team(self, **kwargs: Any) -> None:
+        """Update multiple values in the shared team cache at once."""
+        self.team_cache.update(**kwargs)
+
+    @property
     def strategy(self):
         """Get strategy from gamms agent."""
         return getattr(self.gamms_agent, "strategy", None)

@@ -37,6 +37,10 @@ class SensorEngine:
         
         # Track created sensors to avoid duplicates
         self.created_sensors: Dict[str, Any] = {}
+
+        # Logical sensor names whose payloads are {agent_name: node_id} dicts
+        # and should be pre-split into enemies/teammates by the game engine.
+        self.agent_type_sensor_names: Set[str] = set()
         
         # Register custom sensor classes
         self._register_custom_sensor_classes()
@@ -221,8 +225,9 @@ class SensorEngine:
                 sensor_type=SensorType.AGENT
             )
             self.created_sensors[sensor_id] = sensor
+            self.agent_type_sensor_names.add(sensor_name)
             return sensor_id
-        
+
         if sensor_name == "egocentric_agent":
             from gamms.SensorEngine import SensorType
             sensor_id = f"{agent_name}_egocentric_agent"
@@ -232,11 +237,12 @@ class SensorEngine:
                 sensor_range=sensing_radius or 5.0
             )
             self.created_sensors[sensor_id] = sensor
+            self.agent_type_sensor_names.add(sensor_name)
             return sensor_id
         
-        if sensor_name == "egocentric_map":
+        if sensor_name.endswith("_region"):
             from gamms.SensorEngine import SensorType
-            sensor_id = f"{agent_name}_egocentric_map"
+            sensor_id = f"{agent_name}_{sensor_name}"
             sensor = self.ctx.sensor.create_sensor(
                 sensor_id=sensor_id,
                 sensor_type=SensorType.RANGE,

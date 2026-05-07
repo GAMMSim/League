@@ -1,4 +1,4 @@
-def strategy(state):
+def strategy(state: dict) -> str:
     from typing import Dict, List, Tuple, Any
     import networkx as nx
     import random
@@ -6,21 +6,21 @@ def strategy(state):
     # ===== AGENT CONTROLLER =====
     # DO NOT directly call agent_ctrl methods unless you understand the library
     agent_ctrl = state["agent_controller"]  # Wrapper containing agent state and methods
-    current_pos: int = state["curr_pos"]  # Current node ID where agent is located
-    current_time: int = state["time"]  # Current game timestep
-    team: str = agent_ctrl.team  # Team identifier ('red' or 'blue')
-    red_payoff: float = state['payoff']['red']  # Red team accumulated score
-    blue_payoff: float = state['payoff']['blue']  # Blue team accumulated score
-    
+    current_pos: int = state["curr_pos"]    # Current node ID where agent is located
+    current_time: int = state["time"]       # Current game timestep
+    team: str = agent_ctrl.team             # Team identifier ('red' or 'blue')
+    red_payoff: float = state["payoff"]["red"]   # Red team accumulated score
+    blue_payoff: float = state["payoff"]["blue"]  # Blue team accumulated score
+
     # Agent parameters
-    speed: float = agent_ctrl.speed  # Movement speed (max nodes per turn)
+    speed: float = agent_ctrl.speed                  # Movement speed (max nodes per turn)
     capture_radius: float = agent_ctrl.capture_radius  # Distance to capture flags
 
     # ===== RULE CONFIG =====
     rule_config = state["rule_config"]  # Read-only view of red_global, blue_global, environment
     # Opponent (blue/defender) parameters
-    opp_tagging_radius: float = rule_config["blue_global"]["tagging_radius"]   # tagging interaction range
-    opp_sensing_radius: float = rule_config["blue_global"]["sensing_radius"]   # blue vision radius
+    opp_tagging_radius: float = rule_config["blue_global"]["tagging_radius"]  # tagging interaction range
+    opp_sensing_radius: float = rule_config["blue_global"]["sensing_radius"]  # blue vision radius
     # Environment (stationary sensor network)
     stationary_radius: float = rule_config["environment"]["blue_stationary_sensor_radius"]
     stationary_positions: list = rule_config["environment"]["blue_static_sensor_positions"]
@@ -28,24 +28,33 @@ def strategy(state):
     # ===== INDIVIDUAL CACHE =====
     cache = agent_ctrl.cache  # Per-agent storage, not shared with teammates
 
-    last_target: int = cache.get("last_target", None)  # Previously chosen target node
-    visit_count: int = cache.get("visit_count", 0)  # Number of strategy calls for this agent
-
-    cache.set("last_position", current_pos)  # Store current position for next turn
-    cache.set("visit_count", visit_count + 1)  # Increment visit counter
-    cache.update(last_time=current_time, patrol_index=cache.get("patrol_index", 0) + 1)  # Batch update multiple cache values
+    example_val = cache.get("example_key", None)    # get a value (returns default if missing)
+    cache.set("example_key", example_val)            # set a value
+    cache.update(example_a=0, example_b=1)           # set multiple values at once
 
     # ===== TEAM CACHE (SHARED) =====
-    team_cache = agent_ctrl.team_cache  # Shared storage across all teammates
+    example_shared = agent_ctrl.get_team("example_key", 0)   # get a shared team value
+    agent_ctrl.set_team("example_key", current_time)          # set a shared team value
+    agent_ctrl.update_team(example_a=0, example_b="val")      # set multiple shared values at once
 
-    priority_targets: List[int] = team_cache.get("priority_targets", [])  # How to get data from team cache
+    # ===== SENSORS =====
+    # All sensor data is read here once; variables are reused in map updates and decision logic below.
+    sensors: Dict[str, Tuple[Any, Dict[str, Any]]] = state["sensor"]  # All sensor data
 
-    team_cache.set("last_update", current_time)  # Track when team cache was last modified
-    team_cache.update(total_captures=team_cache.get("total_captures", 0), formation="spread")  # Update team-wide statistics
+    candidates: List[int] = agent_ctrl.sensor_data(state, "candidate_flag")["candidate_flags"] if "candidate_flag" in sensors else []  # Possible flag locations
+
+    enemies: Dict[str, int]   = agent_ctrl.sensor_data(state, "agent")["enemies"]   if "agent" in sensors else {}  # Enemy agents in game {name: node_id}
+    teammates: Dict[str, int] = agent_ctrl.sensor_data(state, "agent")["teammates"] if "agent" in sensors else {}  # Teammate agents in game {name: node_id}
+
+    visible_nodes: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_flag_region")["nodes"] if "egocentric_flag_region" in sensors else {}  # Nodes within sensing radius
+    visible_edges: List[Any]      = agent_ctrl.sensor_data(state, "egocentric_flag_region")["edges"] if "egocentric_flag_region" in sensors else []   # Edges within sensing radius
+
+    detected_flags: List[int] = agent_ctrl.sensor_data(state, "egocentric_flag")["detected_flags"] if "egocentric_flag" in sensors else []  # Real flags within range; flags visible to agent
+    flag_count: int           = agent_ctrl.sensor_data(state, "egocentric_flag")["flag_count"]      if "egocentric_flag" in sensors else 0   # Number of detected flags
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
-    global_map_payload: Dict[str, Any] = state["sensor"]["global_map"][1]
+    global_map_payload: Dict[str, Any] = agent_ctrl.sensor_data(state, "global_map")
     global_map_sensor: nx.Graph = global_map_payload["graph"]  # Full graph topology from sensor
     global_map_apsp = global_map_payload.get("apsp")
 
@@ -66,69 +75,38 @@ def strategy(state):
     agent_map.update_agent_position(team, agent_ctrl.name, current_pos, current_time)
 
     # Update enemy positions from sensor data (if you have visibility)
-    if "agent" in state["sensor"]:
-        all_agents: Dict[str, int] = state["sensor"]["agent"][1]
-        enemy_team: str = "blue" if team == "red" else "red"
-        for agent_name, node_id in all_agents.items():
-            if agent_name.startswith(enemy_team):
-                agent_map.update_agent_position(enemy_team, agent_name, node_id, current_time)
-    # You can update your teammates similarly if desired
+    agent_map.update_team_agents(agent_ctrl.enemy_team, enemies, current_time)
+    # You can update your teammates similarly via agent_ctrl.sensor_data(state, "agent")["teammates"]
 
-    # How to get all position of a team from agent map
-    teammates_data: List[Tuple[str, int, int]] = agent_map.get_team_agents(team)  # [(name, pos, age)] of teammates
+    # How to get all positions of a team from agent map
+    teammates_data: List[Tuple[str, int, int]] = agent_map.get_team_agents(team)            # [(name, pos, age)] of teammates
     # How to get a specific agent's position from agent map
-    enemy_pos, enemy_age = agent_map.get_agent_position("blue", "blue_0")  # (position, age_in_timesteps) or (None, None)
-
-    # ===== SENSORS =====
-    sensors: Dict[str, Tuple[Any, Dict[str, Any]]] = state["sensor"]  # All sensor data
-
-    if "candidate_flag" in sensors:
-        candidates: List[int] = sensors["candidate_flag"][1]["candidate_flags"]  # Possible flag locations
-
-    if "agent" in sensors:
-        all_agents: Dict[str, int] = sensors["agent"][1]  # All agents in game {name: node_id}
-
-    if "egocentric_map" in sensors:
-        visible_nodes: Dict[int, Any] = sensors["egocentric_map"][1]["nodes"]  # Nodes within sensing radius
-        visible_edges: List[Any] = sensors["egocentric_map"][1]["edges"]  # Edges within sensing radius
-
-    if "egocentric_flag" in sensors:
-        detected: List[int] = sensors["egocentric_flag"][1]["detected_flags"]  # Real flags within range
-        count: int = sensors["egocentric_flag"][1]["flag_count"]  # Number of detected flags
+    enemy_pos, enemy_age = agent_map.get_agent_position(agent_ctrl.enemy_team, "blue_0")  # (position, age_in_timesteps) or (None, None)
 
     # ===== DECISION LOGIC =====
     target: int = current_pos  # Default action is to stay at current position
 
-    if "egocentric_flag" in sensors:
-        flags: List[int] = sensors["egocentric_flag"][1]["detected_flags"]  # Flags visible to agent
-        if flags:
-            target = agent_map.shortest_path_step(current_pos, flags[0], speed)  # Move toward first visible flag
-        elif agent_map.graph is not None:
-            neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))  # Adjacent nodes
-            if neighbors:
-                target = random.choice(neighbors)  # No flags visible — wander to a neighbor
-    else:
-        flags = []
-        if agent_map.graph is not None:
-            neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))
-            if neighbors:
-                target = random.choice(neighbors)  # Move to first neighbor
+    if detected_flags:
+        target = agent_map.shortest_path_step(current_pos, detected_flags[0], speed)  # Move toward first visible flag
+    elif agent_map.graph is not None:
+        neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))  # Adjacent nodes
+        if neighbors:
+            target = random.choice(neighbors)  # No flags visible — wander to a neighbor
 
     # ===== OUTPUT =====
     state["action"] = target  # Required: set action for this turn
-    
-    return set()
+    return f"moving to {target}" if target != current_pos else "holding position"  # avoid f-strings here if possible — string construction runs every call even when logging is off and will slow down mass eval
 
 
 def map_strategy(agent_config):
     """
-    Maps each agent to the 'do nothing' strategy.
+    Maps each agent to the attacker strategy.
 
     Parameters:
         agent_config (dict): Configuration dictionary for all agents.
 
     Returns:
-        dict: A dictionary mapping agent names to the stationary strategy.
+        dict: A dictionary mapping agent names to the attacker strategy.
     """
     strategies = {}
     for name in agent_config.keys():

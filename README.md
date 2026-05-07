@@ -1,98 +1,131 @@
 # League-AD: Quick User Guide
 
-This README is focused on running games through `main.py`, choosing strategies, and editing game configs.
+This README covers running games, choosing strategies, and editing game configs.
+
+---
 
 ## 1. Run a game
 
-From the project root:
+### GUI launcher (recommended)
+
+```bash
+python launch_gui.py
+```
+
+A window opens with dropdowns for config, strategies, log settings, and recording options. Select what you want and click **RUN GAME**. The right panel renders a live map preview of the selected config.
+
+### Headless / scripted
 
 ```bash
 python main.py
 ```
 
-`main.py` launches one game using `GameEngine.launch_from_files(...)`.
+Edit `main.py` directly to hard-code your selections (see section 2).
+
+---
 
 ## 2. What to edit in `main.py`
 
-Open `main.py` and set these fields:
-
 ```python
 result = GameEngine.launch_from_files(
-    config_main="config/test1.yml",
+    config_main="example/example_config.yml",
     extra_defs="config/game_config.yml",
-    red_strategy="policies.attacker.gatech_atk_r3",
-    blue_strategy="policies.defender.gatech_def_r3",
+    red_strategy="example.example_atk",
+    blue_strategy="example.example_def",
     log_name=None,
+    set_level=LogLevel.WARNING,
     record_file=False,
     record_video=False,
     vis=True,
 )
 ```
 
-- `config_main`: Main game setup YAML (agents, flags, map, rules).
-- `extra_defs`: Extra shared settings (currently used for visualization settings).
-- `red_strategy`: Python module path for attacker strategy.
-- `blue_strategy`: Python module path for defender strategy.
-- `log_name`: Set `None` to disable logging, or a string to save logs.
-- `record_file`: `True` to record a `.ggr` game file.
-- `record_video`: `True` to capture a real-time MP4 video.
-- `vis`: `True` for visualization, `False` for headless/no-visual mode.
-- `visualization.video_fps` (in `config/game_config.yml`): output FPS for recorded MP4s.
+| Parameter | Description |
+| --- | --- |
+| `config_main` | Main game setup YAML (agents, flags, map, rules) |
+| `extra_defs` | Shared settings file (visualization, etc.) |
+| `red_strategy` | Python module path for the attacker strategy |
+| `blue_strategy` | Python module path for the defender strategy |
+| `log_name` | `None` to disable logging, or a string filename |
+| `set_level` | Log verbosity: `LogLevel.DEBUG / INFO / WARNING / ERROR` |
+| `record_file` | `True` to save a `.ggr` replay file |
+| `record_video` | `True` to capture a real-time MP4 |
+| `vis` | `True` for visualization, `False` for headless mode |
 
-## 3. Strategy modules (important)
+---
 
-Strategies are imported by module path strings, for example:
+## 3. Strategy modules
 
-- `example.example_atk`
-- `example.example_def`
-- `policies.attacker.uncc_atk_F_r3`
-- `policies.defender.gmu_def_r3`
+Strategies live under `example/` or `policies/attacker|defender/` and are referenced by Python module path:
 
-Each strategy module should expose:
+- `example.example_atk` / `example.example_def`
+- `policies.attacker.gmu_atk_r3`
+- `policies.defender.uncc_def_F_r3`
 
-1. `strategy(state)`  
-   - Sets `state["action"]` to the target node for this turn.
-   - Usually returns a `set` (attackers often return discovered flag IDs).
-2. `map_strategy(agent_config)`  
-   - Returns a dict mapping each agent name (like `red_0`) to a strategy function.
+### Required interface
 
-Minimal template:
+Every strategy module must expose two functions:
 
 ```python
-def strategy(state):
+def strategy(state: dict) -> str:
+    # Read state, set action, return a log string
+    state["action"] = current_pos   # int — required
+    return "holding position"       # str — required
+
+def map_strategy(agent_config: dict) -> dict:
+    return {name: strategy for name in agent_config.keys()}
+```
+
+**Contracts enforced at runtime:**
+- `state["action"]` must be set to an `int` (target node ID).
+- Return value must be a `str` (shown in logs at INFO level, no-op otherwise).
+
+### Minimal working template
+
+```python
+def strategy(state: dict) -> str:
     current_pos = state["curr_pos"]
-    state["action"] = current_pos  # stay in place
-    return set()
+    state["action"] = current_pos
+    return "holding position"
 
 def map_strategy(agent_config):
     return {name: strategy for name in agent_config.keys()}
 ```
 
-## 4. Config file guide (`example/example_config.yml`)
+---
 
-Use `example/example_config.yml` as a starting point. Main sections:
+## 4. Config file guide
 
-- `game`: Rule version, max time, interaction/payoff model.
-- `agents`:
-  - `red_global` / `blue_global`: team-level capabilities (speed, sensing, radii, sensors).
-  - `red_config` / `blue_config`: each agent’s `start_node_id`.
-- `flags`:
-  - `real_positions`: true flags.
-  - `candidate_positions`: candidate flag locations.
-- `environment`:
-  - `graph_name`: graph file from `graphs/`.
-  - stationary sensor settings for blue team.
-- `generator`: metadata (can usually be left as-is).
+Use `example/example_config.yml` as a starting point.
+
+| Section | Key fields |
+| --- | --- |
+| `game` | `game_rule`, `max_time`, `interaction_model`, `payoff_model` |
+| `agents.red_global` / `blue_global` | `speed`, `sensing_radius`, `capture_radius` / `tagging_radius`, `sensors` |
+| `agents.red_config` / `blue_config` | Each agent's `start_node_id` |
+| `flags` | `real_positions`, `candidate_positions` |
+| `environment` | `graph_name` (file in `graphs/`), stationary sensor settings |
+
+Configs live in `config/` (excluding `archive/` and `rules/`). The GUI auto-discovers all of them.
+
+---
 
 ## 5. Typical workflow
 
-1. Copy `example/example_config.yml` to a run config (for example `config/test1.yml`).
-2. Edit start nodes, flags, and map as needed.
-3. Choose strategy modules in `main.py`.
-4. Run `python main.py`.
+1. Pick a config in the GUI (or copy `example/example_config.yml` and edit it).
+2. Select attacker and defender strategies from the dropdowns.
+3. Set logging, recording, and visualization options.
+4. Click **RUN GAME**.
+
+---
 
 ## 6. Quick checks if something fails
 
-- Import error for strategy: module path is wrong (must be Python import path, not file path).
-- Agents not moving: strategy did not set `state["action"]`, or target is invalid/out of speed range.
-- No visuals: check `vis=True` and keep `extra_defs="config/game_config.yml"`.
+| Symptom | Likely cause |
+| --- | --- |
+| Import error for strategy | Module path is wrong — must be a Python import path, not a file path |
+| Agents not moving | Strategy did not set `state["action"]`, or target is out of speed range |
+| `TypeError` on strategy return | Strategy returned something other than `str` |
+| `TypeError` on action | `state["action"]` was not set to `int` |
+| No visuals | Check `vis=True` and `extra_defs="config/game_config.yml"` |
+| No map preview in GUI | Graph `.pkl` file for that config is not present in `graphs/` |

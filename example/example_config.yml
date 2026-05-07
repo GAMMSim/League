@@ -22,7 +22,7 @@ agents:
     - candidate_flag
     - agent
     - egocentric_flag
-    - egocentric_map
+    - egocentric_flag_region
   blue_global:
     speed: 1
     tagging_radius: 1
@@ -31,7 +31,7 @@ agents:
     - global_map
     - custom_team
     - egocentric_agent
-    - egocentric_map
+    - egocentric_agent_region
     - flag
     - stationary
   red_config:
