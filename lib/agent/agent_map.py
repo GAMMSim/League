@@ -313,7 +313,8 @@ class AgentMap:
         
         old_time = self.current_time
         self.current_time = new_time
-        debug(f"Time updated from {old_time} to {new_time}")
+        if old_time != new_time:
+            debug(f"Time updated from {old_time} to {new_time}")
 
     def update_agent_position(self, team_name: str, agent_name: str, position: Any, time: int = None) -> None:
         """
@@ -383,7 +384,6 @@ class AgentMap:
             return
             
         if not agent_positions:
-            warning(f"Empty agent_positions dictionary for team '{team_name}'")
             return
             
         if time is None:

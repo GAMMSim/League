@@ -1,0 +1,18 @@
+# ── Core simulation ───────────────────────────────────────────────────────────
+gamms
+networkx>=3.0
+numpy>=1.24
+typeguard>=4.0
+pyyaml>=6.0
+shapely>=2.0
+
+# ── GUI launcher (launch_gui.py) ──────────────────────────────────────────────
+matplotlib>=3.7
+
+# ── Strategy policies ─────────────────────────────────────────────────────────
+scipy>=1.10
+
+# ── Analysis / mass_eval (optional) ──────────────────────────────────────────
+pandas>=2.0
+seaborn>=0.12
+imageio>=2.28

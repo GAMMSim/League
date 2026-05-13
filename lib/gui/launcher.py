@@ -388,26 +388,6 @@ def main() -> None:
     y = (root.winfo_screenheight() - h) // 2
     root.geometry(f"+{x}+{y}")
 
-    # ── Bring window to front and switch spaces if needed ─────────────────────
-    # On macOS: AppleScript activates the process, which triggers the same
-    # space-switch that matplotlib uses (NSApplication activateIgnoringOtherApps).
-    # On Windows/Linux: toggling -topmost is sufficient.
-    import sys, subprocess
-    root.lift()
-    root.focus_force()
-    if sys.platform == "darwin":
-        try:
-            subprocess.Popen(
-                ["osascript", "-e",
-                 'tell application "System Events" to set frontmost of '
-                 'every process whose unix id is ' + str(os.getpid()) + ' to true']
-            )
-        except Exception:
-            pass
-    else:
-        root.attributes("-topmost", True)
-        root.after(200, lambda: root.attributes("-topmost", False))
-
     # ── Run button ─────────────────────────────────────────────────────────────
     def on_run() -> None:
         cfg        = config_var.get()

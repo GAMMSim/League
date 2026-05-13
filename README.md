@@ -1,10 +1,31 @@
 # League-AD: Quick User Guide
 
-This README covers running games, choosing strategies, and editing game configs.
+This README covers installation, running games, choosing strategies, and editing game configs.
 
 ---
 
-## 1. Run a game
+## 1. Installation
+
+**Python 3.10+ recommended.**
+
+Install all dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+| Group | Packages | Required for |
+| --- | --- | --- |
+| Core simulation | `gamms`, `networkx`, `numpy`, `typeguard`, `pyyaml`, `shapely` | All game modes |
+| GUI launcher | `matplotlib` | `launch_gui.py` |
+| Strategy policies | `scipy` | Policies under `policies/` |
+| Mass evaluation | `pandas`, `seaborn`, `imageio` | `mass_eval/` scripts (optional) |
+
+> The mass-eval packages are optional — the core engine and GUI run without them.
+
+---
+
+## 2. Run a game
 
 ### GUI launcher (recommended)
 
@@ -20,11 +41,11 @@ A window opens with dropdowns for config, strategies, log settings, and recordin
 python main.py
 ```
 
-Edit `main.py` directly to hard-code your selections (see section 2).
+Edit `main.py` directly to hard-code your selections (see section 3).
 
 ---
 
-## 2. What to edit in `main.py`
+## 3. What to edit in `main.py`
 
 ```python
 result = GameEngine.launch_from_files(
@@ -54,7 +75,7 @@ result = GameEngine.launch_from_files(
 
 ---
 
-## 3. Strategy modules
+## 4. Strategy modules
 
 Strategies live under `example/` or `policies/attacker|defender/` and are referenced by Python module path:
 
@@ -94,7 +115,7 @@ def map_strategy(agent_config):
 
 ---
 
-## 4. Config file guide
+## 5. Config file guide
 
 Use `example/example_config.yml` as a starting point.
 
@@ -110,7 +131,7 @@ Configs live in `config/` (excluding `archive/` and `rules/`). The GUI auto-disc
 
 ---
 
-## 5. Typical workflow
+## 6. Typical workflow
 
 1. Pick a config in the GUI (or copy `example/example_config.yml` and edit it).
 2. Select attacker and defender strategies from the dropdowns.
@@ -119,7 +140,7 @@ Configs live in `config/` (excluding `archive/` and `rules/`). The GUI auto-disc
 
 ---
 
-## 6. Quick checks if something fails
+## 7. Quick checks if something fails
 
 | Symptom | Likely cause |
 | --- | --- |

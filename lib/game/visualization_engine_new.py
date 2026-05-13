@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, Optional, Tuple
 from typeguard import typechecked
 
@@ -65,6 +66,7 @@ class VisEngine:
         self._hud_events: List[Tuple[str, tuple]] = []  # (text, rgb_color)
         self._hud_payoff = {"total": 0.0, "tag": 0.0, "capture": 0.0, "discover": 0.0}
         self._hud_artist_created = False
+        self._match_info_lines: List[Tuple[str, tuple]] = []
 
         # Initialize visualization
         self._setup_base_visualization()
@@ -228,7 +230,6 @@ class VisEngine:
     def update_display(self) -> None:
         """Update the visual display (handle pygame events, render frame)."""
         try:
-            debug("Updating display")
             self.ctx.visual.simulate()
         except Exception as e:
             warning(f"Display update failed: {e}")
@@ -291,6 +292,22 @@ class VisEngine:
         except Exception as e:
             warning(f"Failed to create HUD artist: {e}")
 
+    def set_match_info(self, red_strategy: str, blue_strategy: str, config_main: str, config: Dict[str, Any]) -> None:
+        """Populate the static match-info header. Call once after game setup."""
+        red_short  = red_strategy.split(".")[-1]
+        blue_short = blue_strategy.split(".")[-1]
+        num_red    = len(config["agents"]["red_config"])
+        num_blue   = len(config["agents"]["blue_config"])
+        num_flags  = len(config["flags"]["real_positions"])
+        config_name = os.path.splitext(os.path.basename(config_main))[0]
+        game_rule   = config["game"]["game_rule"]
+        self._match_info_lines = [
+            (f"attacker ({num_red}):  {red_short}",  (200,  50,  50)),
+            (f"defender ({num_blue}): {blue_short}", ( 50,  50, 200)),
+            (f"flags: {num_flags}",                  ( 50, 180,  50)),
+            (f"{config_name}  |  rule: {game_rule}", (  0,   0,   0)),
+        ]
+
     def add_hud_event(self, text: str, color: tuple) -> None:
         """Push an event line to the HUD. Oldest entries are dropped when full."""
         self._hud_events.append((text, color))
@@ -311,6 +328,14 @@ class VisEngine:
             font = pygame.font.SysFont("monospace", self._hud_font_size)
             x, y = self._hud_x, self._hud_y
             line_h = self._hud_line_h
+
+            # Match info header
+            for text, color in self._match_info_lines:
+                surf = font.render(text, True, color)
+                surface.blit(surf, (x, y))
+                y += line_h
+            if self._match_info_lines:
+                y += 4
 
             # Payoff breakdown
             p = self._hud_payoff

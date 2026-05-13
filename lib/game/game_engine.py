@@ -293,6 +293,8 @@ class GameEngine:
 
         # Visuals
         engine.setup_game_visuals(config.get("agents", {}))
+        if engine.vis_engine:
+            engine.vis_engine.set_match_info(red_strategy, blue_strategy, config_main, config)
         if tiff_path and engine.vis_engine:
             engine.vis_engine.setup_map_overlay(tiff_path)
 
