@@ -20,8 +20,8 @@ visualization:
     x: 400                          # Left edge of HUD text in screen pixels
     # x: 700                          # Left edge of HUD text in screen pixels
     y: 10                           # Top edge of HUD text in screen pixels
-    line_height: 18                 # Vertical spacing between HUD lines in pixels
-    font_size: 18                   # Font size for HUD text in pixels
+    line_height: 28                 # Vertical spacing between HUD lines in pixels
+    font_size: 25                   # Font size for HUD text in pixels
     max_events: 20                   # Maximum number of event lines shown before oldest are dropped
 
   # Death marker settings — visuals placed where an agent dies

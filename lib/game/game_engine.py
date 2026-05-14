@@ -559,15 +559,31 @@ class GameEngine:
                                     "teammates": {n: p for n, p in payload.items() if n.startswith(own_team)},
                                 })
 
-                # Consolidate all stationary_* sensor payloads into a single list
-                # under state["sensor"]["stationary"] so strategies need no loop.
+                # Consolidate all stationary_* sensor payloads under state["sensor"]["stationary"]:
+                #   "detections": list of per-sensor entries (original payloads)
+                #   "enemies"/"teammates": flat {name: node_id} aggregated across all sensors,
+                #     pre-filtered by team so strategies need no loop or color-string filtering.
                 stationary = [
                     sensors[sname][1]
                     for sname in sensors
                     if sname.startswith("stationary_")
                 ]
                 if stationary:
-                    sensors["stationary"] = (None, stationary)
+                    enemy_team = agent_controller.enemy_team
+                    own_team = agent_controller.team
+                    enemies: Dict[str, int] = {}
+                    teammates: Dict[str, int] = {}
+                    for entry in stationary:
+                        for name, data in entry.get("detected_agents", {}).items():
+                            if name.startswith(enemy_team):
+                                enemies[name] = data["node_id"]
+                            elif name.startswith(own_team):
+                                teammates[name] = data["node_id"]
+                    sensors["stationary"] = (None, {
+                        "detections": stationary,
+                        "enemies": enemies,
+                        "teammates": teammates,
+                    })
 
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:
                     try:

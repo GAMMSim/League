@@ -51,9 +51,12 @@ def strategy(state: dict) -> str:
     visible_nodes: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_agent_region")["nodes"] if "egocentric_agent_region" in sensors else {}  # Nodes within sensing radius
     visible_edges: List[Any]      = agent_ctrl.sensor_data(state, "egocentric_agent_region")["edges"] if "egocentric_agent_region" in sensors else []   # Edges within sensing radius
 
-    # Stationary sensors — pre-consolidated by game engine into a single list
-    # Each entry: {"fixed_position": int, "detected_agents": {name: {node_id, distance}}, "agent_count": int, "covered_nodes": [...]}
-    stationary_detections: List[Dict[str, Any]] = agent_ctrl.sensor_data(state, "stationary") or []
+    # Stationary sensors — pre-consolidated by game engine and pre-filtered by team
+    # {"enemies": {name: node_id}, "teammates": {name: node_id}, "detections": [per-sensor entries]}
+    # Each per-sensor entry: {"fixed_position": int, "detected_agents": {name: {node_id, distance}}, "agent_count": int, "covered_nodes": [...]}
+    stationary: Dict[str, Any] = agent_ctrl.sensor_data(state, "stationary") or {"enemies": {}, "teammates": {}, "detections": []}
+    stationary_enemies: Dict[str, int] = stationary["enemies"]      # {name: node_id} of attackers seen by any stationary sensor
+    stationary_detections: List[Dict[str, Any]] = stationary["detections"]  # raw per-sensor entries
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
