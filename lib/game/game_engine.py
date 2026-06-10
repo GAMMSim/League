@@ -101,6 +101,8 @@ class GameEngine:
         self._blue_strategy_time: float = 0.0
         self._red_strategy_calls: int = 0
         self._blue_strategy_calls: int = 0
+        self._red_strategy_errors: int = 0
+        self._blue_strategy_errors: int = 0
 
     def _empty_step_payoff_breakdown(self) -> Dict[str, Dict[str, float]]:
         return {
@@ -246,7 +248,7 @@ class GameEngine:
         """
         One-liner runner that mirrors the old __main__ behavior but keeps the call-site clean.
         Loads config, builds runtime, assigns strategies, sets up visuals, runs, and returns the engine.
-        
+
         Args:
             log_name: Name for the log file. If None, no logging will occur.
             record_file: If True, record the game session to a .ggr file. Recording is independent of logging.
@@ -266,6 +268,13 @@ class GameEngine:
                     return f"{prefix}_{timestamp}.mp4"
             return f"{stem}.mp4"
 
+        import sys as _sys
+        _major, _minor = _sys.version_info[:2]
+        if (_major, _minor) < (3, 11):
+            warning(f"Python {_major}.{_minor} is too old. Python 3.11 or 3.12 is recommended.")
+        elif (_major, _minor) > (3, 12):
+            warning(f"Python {_major}.{_minor} is newer than recommended. Use Python 3.11 or 3.12 to avoid compatibility issues with gamms.")
+
         if set_level is not None:
             set_log_level(set_level)
 
@@ -274,6 +283,9 @@ class GameEngine:
         if extra_defs:
             loader.load_extra_definitions(extra_defs, force=True)
         config = loader.config_data
+
+        if vis and record_video:
+            os.environ.setdefault("SDL_VIDEO_WINDOW_POS", "0,0")
 
         # Build runtime subsystems
         ctx, graph, vis_engine, sensor_engine, agent_engine, interaction_engine, logger = cls.build_runtime(
@@ -328,14 +340,25 @@ class GameEngine:
                 warning(f"Failed to set logger metadata: {e}")
 
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        video_fps_raw = (config.get("visualization", {}) or {}).get("video_fps", 2)
+        _vis_cfg_rec = (config.get("visualization", {}) or {})
+        video_fps_raw = _vis_cfg_rec.get("video_fps", 20)
         try:
             video_fps = float(video_fps_raw)
             if video_fps <= 0:
                 raise ValueError("video_fps must be > 0")
         except Exception:
-            warning(f"Invalid visualization.video_fps={video_fps_raw}; using default 2")
-            video_fps = 2.0
+            warning(f"Invalid visualization.video_fps={video_fps_raw}; using default 20")
+            video_fps = 20.0
+
+        # Each game step is rendered exactly this many times with alpha 0→1,
+        # so every step always produces the same frame count regardless of
+        # how fast or slow the wall clock runs.
+        video_frames_per_step_raw = _vis_cfg_rec.get("video_frames_per_step", 5)
+        try:
+            video_frames_per_step = max(1, int(video_frames_per_step_raw))
+        except Exception:
+            video_frames_per_step = 5
+
         json_filename: Optional[str] = None
         video_writer: Optional[Any] = None
         video_temp_path: Optional[str] = None
@@ -352,39 +375,56 @@ class GameEngine:
                     visual_obj = getattr(ctx, "visual", None)
                     if visual_obj is None:
                         warning("record_video=True but no visual object is available on context.")
+                    elif not hasattr(visual_obj, "simulate"):
+                        warning("record_video=True but gamms visual has no simulate(); recording disabled.")
                     else:
-                        # Prefer per-render-frame hook when available. In GAMMS,
-                        # `simulate()` may run multiple internal animation frames;
-                        # patching `update()` captures those transitions.
-                        if hasattr(visual_obj, "update"):
-                            video_method_name = "update"
-                        elif hasattr(visual_obj, "simulate"):
-                            video_method_name = "simulate"
-                        else:
-                            video_method_name = None
+                        video_method_name = "simulate"
+                        original_visual_method = visual_obj.simulate
+                        video_temp_path = os.path.join(project_root, f".tmp_video_{int(time.time())}.mp4")
+                        video_writer = imageio.get_writer(video_temp_path, fps=video_fps)
+                        frame_capture_error_reported = False
 
-                        if video_method_name is None:
-                            warning("record_video=True but no compatible visual update method was found.")
-                        else:
-                            original_visual_method = getattr(visual_obj, video_method_name)
-                            video_temp_path = os.path.join(project_root, f".tmp_video_{int(time.time())}.mp4")
-                            video_writer = imageio.get_writer(video_temp_path, fps=video_fps)
-                            frame_capture_error_reported = False
+                        def _capture_frame() -> None:
+                            nonlocal frame_capture_error_reported
+                            try:
+                                img_data = ctx.visual._pygame.surfarray.array3d(ctx.visual._screen)
+                                img_data = img_data.transpose([1, 0, 2])
+                                video_writer.append_data(img_data)
+                            except Exception as e:
+                                if not frame_capture_error_reported:
+                                    warning(f"Frame capture failed during video recording: {e}")
+                                    frame_capture_error_reported = True
 
-                            def _patched_visual_step() -> None:
-                                nonlocal frame_capture_error_reported
-                                original_visual_method()
+                        def _patched_simulate() -> None:
+                            n = video_frames_per_step
+                            # _toggle_waiting_simulation(True) sets _waiting_simulation=True
+                            # and _alpha=0 on every agent artist, which tells the drawer to
+                            # lerp between prev_node_id and current_node_id using _alpha.
+                            visual_obj._toggle_waiting_simulation(True)
+                            visual_obj._simulation_time = 0.0
+                            for i in range(n):
+                                alpha = (i + 1) / n
                                 try:
-                                    img_data = ctx.visual._pygame.surfarray.array3d(ctx.visual._screen)
-                                    img_data = img_data.transpose([1, 0, 2])
-                                    video_writer.append_data(img_data)
-                                except Exception as e:
-                                    if not frame_capture_error_reported:
-                                        warning(f"Frame capture failed during video recording: {e}")
-                                        frame_capture_error_reported = True
+                                    for artist in visual_obj._agent_artists.values():
+                                        artist.data["_alpha"] = alpha
+                                except Exception:
+                                    pass
+                                try:
+                                    visual_obj.handle_input()
+                                    visual_obj.handle_single_draw()
+                                    visual_obj._pygame.display.flip()
+                                    visual_obj._clock.tick()
+                                except Exception:
+                                    original_visual_method()
+                                    return
+                                _capture_frame()
+                            visual_obj._toggle_waiting_simulation(False)
+                            visual_obj._simulation_time = 0.0
 
-                            setattr(visual_obj, video_method_name, _patched_visual_step)
-                            success("Real-time video recording enabled")
+                        setattr(visual_obj, "simulate", _patched_simulate)
+                        success(f"Video recording enabled "
+                                f"({video_fps:.0f} fps × {video_frames_per_step} frames/step "
+                                f"= {video_frames_per_step/video_fps:.2f}s per step)")
                 except Exception as e:
                     warning(f"Failed to start video recording: {e}")
                     video_writer = None
@@ -607,6 +647,10 @@ class GameEngine:
                         error(f"Strategy execution failed for {agent_name}: {e}")
                         traceback.print_exc()
                         actions[agent_name] = agent_controller.current_position
+                        if agent_controller.team == "red":
+                            self._red_strategy_errors += 1
+                        else:
+                            self._blue_strategy_errors += 1
                 else:
                     if self.vis_engine and hasattr(self.vis_engine, "get_human_input"):
                         action = self.vis_engine.get_human_input(agent_name, state)
@@ -898,6 +942,8 @@ class GameEngine:
             self._blue_strategy_time = 0.0
             self._red_strategy_calls = 0
             self._blue_strategy_calls = 0
+            self._red_strategy_errors = 0
+            self._blue_strategy_errors = 0
 
             info(f"Starting game with max time: {self.max_time}")
 

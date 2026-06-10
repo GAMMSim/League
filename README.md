@@ -6,9 +6,55 @@ This README covers installation, running games, choosing strategies, and editing
 
 ## 1. Installation
 
-**Python 3.10+ recommended.**
+**Python 3.11 or 3.12 required.** Python 3.13+ has known compatibility issues with the `gamms` visualization engine.
 
-Install all dependencies:
+This version targets **`gamms` 1.0.0** (the current PyPI release) — `pip install -r requirements.txt` pulls it in automatically.
+
+### Install Python 3.11/3.12
+
+**macOS** — install via Homebrew:
+
+```bash
+brew install python@3.12 python-tk@3.12
+```
+
+`python-tk@3.12` provides `tkinter`, which is required by the GUI launcher. If `python3.12` isn't on your `PATH` afterward, add this to your shell profile (`~/.zprofile` for zsh, `~/.bash_profile` for bash):
+
+```bash
+export PATH="/opt/homebrew/opt/python@3.12/libexec/bin:${PATH}"
+```
+
+**Windows** — download Python 3.12 from [python.org](https://www.python.org/downloads/) and run the installer. Check **"Add python.exe to PATH"** during install. `tkinter` is bundled by default. Use the `py` launcher to target the right version, e.g. `py -3.12 -m venv .venv`.
+
+**Linux (Debian/Ubuntu)**:
+
+```bash
+sudo apt update
+sudo apt install python3.12 python3.12-venv python3-tk
+```
+
+On other distros, install the equivalent `python3.12` and `python3-tk` (or `python3-tkinter`) packages via your package manager.
+
+### Set up a virtual environment
+
+A virtual environment keeps project dependencies isolated from your system Python.
+
+```bash
+cd league_dev
+python3 -m venv .venv     # Windows: py -3.12 -m venv .venv
+```
+
+Activate it:
+
+| Platform | Command |
+| --- | --- |
+| macOS / Linux | `source .venv/bin/activate` |
+| Windows (PowerShell) | `.venv\Scripts\Activate.ps1` |
+| Windows (cmd) | `.venv\Scripts\activate.bat` |
+
+Your prompt will show `(.venv)` when active. Run this activation line each time you open a new terminal.
+
+### Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -98,6 +144,7 @@ def map_strategy(agent_config: dict) -> dict:
 ```
 
 **Contracts enforced at runtime:**
+
 - `state["action"]` must be set to an `int` (target node ID).
 - Return value must be a `str` (shown in logs at INFO level, no-op otherwise).
 

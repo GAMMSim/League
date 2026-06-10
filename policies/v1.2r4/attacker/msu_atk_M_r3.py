@@ -202,7 +202,7 @@ def strategy(state: dict) -> str:
 
     target , score = best_neighbour
 
-    print(f'{nx.neighbors(u_graph, current_pos)} {target=} {score=}')
+    # print(f'{nx.neighbors(u_graph, current_pos)} {target=} {score=}')
     
     # ===== OUTPUT =====
     state["action"] = target  # Required: set action for this turn

@@ -20,7 +20,7 @@ class InteractionEngine:
     def __init__(self, agent_engine: AgentEngine, G: nx.Graph, config: Dict[str, Any],
                  discovered_flags: Optional[Set[int]] = None) -> None:
         debug("Initializing InteractionEngine")
-        warning("Current interaction engine only acceptps red-vs-blue CTF-style games.")
+        info("Current interaction engine only accepts red-vs-blue CTF-style games.")
 
         self.engine = agent_engine
         self.ctx = agent_engine.ctx

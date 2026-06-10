@@ -5,6 +5,7 @@ visualization:
   window_size: [3008, 1692]         # Window width and height in pixels
   game_speed: 0.5                     # Speed multiplier for game visualization
   video_fps: 20                        # Output FPS for record_video MP4 files
+  video_frames_per_step: 5            # Frames per game step (5/20fps = 0.25s per step, always equal regardless of wall-clock speed)
   draw_node_id: false               # Whether to display node IDs on visualization
   visualization_engine: "PYGAME"   # Visualization backend to use
   sizes:
@@ -29,10 +30,10 @@ visualization:
 
 agents:
   red_global:
-    color: "red"
+    color: [220, 50, 50]
     size: 13
   blue_global:
-    color: "blue"
+    color: [50, 100, 220]
     size: 13
 
 game:

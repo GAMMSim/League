@@ -101,7 +101,7 @@ class MapOverlayVisual:
             import pygame
             rm = ctx.visual._render_manager
             layer = rm.current_drawing_artist.get_layer()
-            surface = ctx.visual._get_target_surface(layer)
+            surface = ctx.visual._get_target_surface()
             screen_w, screen_h = surface.get_size()
 
             b = self._bounds

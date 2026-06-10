@@ -1,5 +1,8 @@
+# Python 3.11 or 3.12 recommended. See README for setup instructions.
+
 # ── Core simulation ───────────────────────────────────────────────────────────
-gamms
+gamms>=1.0.0
+pygame>=2.6.1
 networkx>=3.0
 numpy>=1.24
 typeguard>=4.0
@@ -7,6 +10,10 @@ pyyaml>=6.0
 shapely>=2.0
 
 # ── GUI launcher (launch_gui.py) ──────────────────────────────────────────────
+# Requires tkinter (not a pip package).
+#   macOS (Homebrew Python): brew install python-tk@3.12
+#   Linux (Debian/Ubuntu):   sudo apt install python3-tk
+#   Windows:                 bundled with the python.org installer
 matplotlib>=3.7
 
 # ── Strategy policies ─────────────────────────────────────────────────────────
@@ -16,3 +23,14 @@ scipy>=1.10
 pandas>=2.0
 seaborn>=0.12
 imageio>=2.28
+imageio[ffmpeg]>=2.28
+tqdm>=4.65
+
+# ── MIT specific (optional) ─────────────────────────────────────────────────
+torch>=2.5.1,<=2.9.0
+torch-geometric>=2.7.0
+stable-baselines3>=2.6.0
+gymnasium>=1.1.1
+networkx>=3.4.2
+numpy>=2.2.0
+

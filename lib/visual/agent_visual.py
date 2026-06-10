@@ -7,7 +7,7 @@ except ImportError:
     from ..core.console import *
 
 # Transparency (alpha) for all sensor radius circles
-SENSOR_ALPHA = 0.1
+SENSOR_ALPHA = 0.15
 # Outline width (pixels) for all sensor radius circles
 SENSOR_EDGE_WIDTH = 1
 # Outline color (RGB) and alpha for all sensor radius circles
@@ -81,12 +81,6 @@ class AgentVisual:
             except ImportError:
                 default_color = "white"
 
-            # Define team colors
-            team_colors = {
-                "red": self.colors.get("red_global", "red"),
-                "blue": self.colors.get("blue_global", "blue")
-            }
-
             agents_configured = 0
 
             # Process each team configuration
@@ -94,13 +88,14 @@ class AgentVisual:
                 if key.endswith("_config"):  # red_config, blue_config, etc.
                     team_name = key.replace("_config", "")  # extract "red" from "red_config"
                     debug(f"Processing {key} for team '{team_name}'")
-                    
+
                     # Get global config for this team
                     global_key = f"{team_name}_global"
                     global_config = agents_config.get(global_key, {})
-                    
-                    # Get team color
-                    team_color = team_colors.get(team_name, default_color)
+
+                    # Get team color from global config; convert list to tuple if loaded from YAML
+                    raw_color = global_config.get("color", default_color)
+                    team_color = tuple(raw_color) if isinstance(raw_color, list) else raw_color
                     global_size = global_config.get("size", default_size)
                     
                     debug(f"Team '{team_name}' using color: {team_color}, size: {global_size}")
@@ -221,7 +216,7 @@ class AgentVisual:
             from gamms.typing import ArtistType
             
             artist = Artist(self.ctx, self._render_agent_label, layer=30)
-            artist.set_artist_type(ArtistType.AGENT)
+            artist.set_artist_type(ArtistType.DYNAMIC)
             
             artist.data.update({
                 "agent_name": agent_name,
@@ -250,25 +245,15 @@ class AgentVisual:
             agent = ctx.agent.get_agent(agent_name)
             current_node_id = agent.current_node_id
 
-            # Check if we're in animation mode
-            waiting_simulation = data.get('_waiting_simulation', False)
-
-            if waiting_simulation:
-                # Get interpolation alpha
-                alpha = data.get('_alpha', 1.0)
-
-                # Get previous and current nodes
-                prev_node = ctx.graph.graph.get_node(agent.prev_node_id)
-                curr_node = ctx.graph.graph.get_node(current_node_id)
-
-                # Interpolate position (same as agent does)
-                x = prev_node.x + alpha * (curr_node.x - prev_node.x)
-                y = prev_node.y + alpha * (curr_node.y - prev_node.y)
+            # Follow the agent dot's already-computed position (includes edge linestring)
+            agent_artist = ctx.visual._dynamic_artists.get(agent_name)
+            if (agent_artist is not None
+                    and 'agent_data' in agent_artist.data
+                    and agent_artist.data['agent_data'].current_position is not None):
+                x, y = agent_artist.data['agent_data'].current_position
             else:
-                # Static position when not animating
                 node = ctx.graph.graph.get_node(current_node_id)
-                x = node.x
-                y = node.y
+                x, y = node.x, node.y
 
             # Find co-located agents at the same node and compute y-offset
             colocated = sorted(
@@ -307,7 +292,7 @@ class AgentVisual:
             circle_id = f"{agent_name}_sensor_circle"
             
             artist = Artist(self.ctx, self._render_agent_circle, layer=25)
-            artist.set_artist_type(ArtistType.AGENT)  # Makes it animate!
+            artist.set_artist_type(ArtistType.DYNAMIC)
             
             artist.data.update({
                 "agent_name": agent_name,
@@ -331,26 +316,16 @@ class AgentVisual:
         try:
             # Get the agent
             agent = ctx.agent.get_agent(agent_name)
-            
-            # Check if we're in animation mode
-            waiting_simulation = data.get('_waiting_simulation', False)
-            
-            if waiting_simulation:
-                # Get interpolation alpha
-                alpha = data.get('_alpha', 1.0)
-                
-                # Get previous and current nodes
-                prev_node = ctx.graph.graph.get_node(agent.prev_node_id)
-                curr_node = ctx.graph.graph.get_node(agent.current_node_id)
-                
-                # Interpolate position (same as agent does)
-                x = prev_node.x + alpha * (curr_node.x - prev_node.x)
-                y = prev_node.y + alpha * (curr_node.y - prev_node.y)
+
+            # Follow the agent dot's already-computed position (includes edge linestring)
+            agent_artist = ctx.visual._dynamic_artists.get(agent_name)
+            if (agent_artist is not None
+                    and 'agent_data' in agent_artist.data
+                    and agent_artist.data['agent_data'].current_position is not None):
+                x, y = agent_artist.data['agent_data'].current_position
             else:
-                # Static position when not animating
                 node = ctx.graph.graph.get_node(agent.current_node_id)
-                x = node.x
-                y = node.y
+                x, y = node.x, node.y
             
             # Extract RGBA
             if len(color) == 4:
@@ -368,13 +343,11 @@ class AgentVisual:
             if screen_radius < 1:
                 return
             
-            # Get the layer surface
-            layer = render_manager.current_drawing_artist.get_layer()
-            surface = ctx.visual._get_target_surface(layer)
-            
+            surface = ctx.visual._get_target_surface()
+
             try:
                 import pygame
-                
+
                 # Create temporary surface with alpha
                 surf_size = int(screen_radius * 2 + 4)
                 temp_surface = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
@@ -507,9 +480,7 @@ class AgentVisual:
             if screen_radius < 1:
                 return
 
-            # Get the layer surface
-            layer = render_manager.current_drawing_artist.get_layer()
-            surface = ctx.visual._get_target_surface(layer)
+            surface = ctx.visual._get_target_surface()
 
             import pygame
 

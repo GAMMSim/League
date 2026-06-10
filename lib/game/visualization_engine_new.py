@@ -322,8 +322,7 @@ class VisEngine:
         try:
             import pygame
             render_manager = ctx.visual._render_manager
-            layer = render_manager.current_drawing_artist.get_layer()
-            surface = ctx.visual._get_target_surface(layer)
+            surface = ctx.visual._get_target_surface()
 
             font = pygame.font.SysFont("monospace", self._hud_font_size)
             x, y = self._hud_x, self._hud_y

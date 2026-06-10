@@ -7,7 +7,7 @@ except ImportError:
     from ..core.console import *
 
 # Transparency (alpha) for all sensor radius circles
-SENSOR_ALPHA = 0.1
+SENSOR_ALPHA = 0.15
 # Outline width (pixels) for all sensor radius circles
 SENSOR_EDGE_WIDTH = 1
 # Outline color (RGB) and alpha for all sensor radius circles
@@ -212,8 +212,7 @@ class FlagVisual:
 
         try:
             import pygame
-            layer = render_manager.current_drawing_artist.get_layer()
-            surface = ctx.visual._get_target_surface(layer)
+            surface = ctx.visual._get_target_surface()
 
             # Pole: centered on sx, rising upward from the node (sy - pole_height to sy)
             pole_rect = pygame.Rect(sx - pole_width // 2, sy - pole_height, pole_width, pole_height)
@@ -313,9 +312,7 @@ class FlagVisual:
         if screen_radius < 1:
             return
         
-        # Get the layer surface (not the main screen!)
-        layer = render_manager.current_drawing_artist.get_layer()
-        surface = ctx.visual._get_target_surface(layer)
+        surface = ctx.visual._get_target_surface()
         
         try:
             import pygame
