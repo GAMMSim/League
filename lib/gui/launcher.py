@@ -245,6 +245,12 @@ def main() -> None:
     rec_file_var  = tk.BooleanVar(value=False)
     rec_video_var = tk.BooleanVar(value=False)
     vis_var       = tk.BooleanVar(value=True)
+    # Default OFF: the building-occluded visibility polygon/glow is real
+    # per-frame geometry (lib/core/visibility_polygon.py) — cheap enough for
+    # a one-shot recorded video, but expensive enough to make the interactive
+    # window choppy. Off by default here; video/headless runs are unaffected
+    # (they go through main.py / mass_eval, not this checkbox).
+    occlusion_var = tk.BooleanVar(value=False)
     tiff_var      = tk.StringVar(value="")
 
     FONT = ("TkDefaultFont", 15)
@@ -360,23 +366,24 @@ def main() -> None:
     tk.Checkbutton(left, text="Record file (.ggr)",  variable=rec_file_var,  font=FONT, anchor="w").grid(row=9,  column=0, columnspan=3, sticky="w", pady=2)
     tk.Checkbutton(left, text="Record video (.mp4)", variable=rec_video_var, font=FONT, anchor="w").grid(row=10, column=0, columnspan=3, sticky="w", pady=2)
     tk.Checkbutton(left, text="Visualization",        variable=vis_var,       font=FONT, anchor="w").grid(row=11, column=0, columnspan=3, sticky="w", pady=2)
+    tk.Checkbutton(left, text="Occlusion visuals (slower)", variable=occlusion_var, font=FONT, anchor="w").grid(row=12, column=0, columnspan=3, sticky="w", pady=2)
 
-    sep(12)
+    sep(13)
 
-    lbl("TIFF path:", 13)
+    lbl("TIFF path:", 14)
     tk.Entry(left, textvariable=tiff_var, font=FONT, width=menu_w + 2).grid(
-        row=13, column=1, sticky="ew", pady=3
+        row=14, column=1, sticky="ew", pady=3
     )
     tk.Button(left, text="Browse…", font=FONT, command=lambda: _browse_tiff(tiff_var)).grid(
-        row=13, column=2, padx=(6, 0), pady=3
+        row=14, column=2, padx=(6, 0), pady=3
     )
 
-    sep(14)
+    sep(15)
 
-    graph_lbl .grid(row=15, column=0, columnspan=3, sticky="w", pady=1)
-    counts_lbl.grid(row=16, column=0, columnspan=3, sticky="w", pady=1)
-    flags_lbl .grid(row=17, column=0, columnspan=3, sticky="w", pady=1)
-    time_lbl  .grid(row=18, column=0, columnspan=3, sticky="w", pady=1)
+    graph_lbl .grid(row=16, column=0, columnspan=3, sticky="w", pady=1)
+    counts_lbl.grid(row=17, column=0, columnspan=3, sticky="w", pady=1)
+    flags_lbl .grid(row=18, column=0, columnspan=3, sticky="w", pady=1)
+    time_lbl  .grid(row=19, column=0, columnspan=3, sticky="w", pady=1)
 
     # Trigger initial preview
     update_preview(config_var.get())
@@ -399,6 +406,7 @@ def main() -> None:
         rec_file   = rec_file_var.get()
         rec_video  = rec_video_var.get()
         vis        = vis_var.get()
+        occlusion  = occlusion_var.get()
         tiff       = tiff_var.get().strip() or None
         root.destroy()
 
@@ -416,6 +424,7 @@ def main() -> None:
             record_video=rec_video,
             vis=vis,
             tiff_path=tiff,
+            show_occlusion_visuals=occlusion,
         )
 
     tk.Button(

@@ -21,7 +21,10 @@ agents:
     - global_map
     - candidate_flag
     - agent
-    - egocentric_flag
+    - name: egocentric_flag
+      model: red_flag_r400
+      carrier: agent
+      flags: real
     - egocentric_flag_region
   blue_global:
     speed: 1
@@ -30,50 +33,68 @@ agents:
     sensors:
     - global_map
     - custom_team
-    - egocentric_agent
+    - name: egocentric_agent
+      model: blue_agent_r250
+      carrier: agent
+      team: blue
     - egocentric_agent_region
     - flag
-    - stationary
+    - name: stationary
+      model: blue_tower_r450
+      at: blue_static_sensor_positions
   red_config:
     red_0:
-      start_node_id: 131
+      start_node_id: 101
     red_1:
-      start_node_id: 79
+      start_node_id: 128
     red_2:
-      start_node_id: 115
+      start_node_id: 48
     red_3:
-      start_node_id: 197
+      start_node_id: 38
     red_4:
       start_node_id: 127
   blue_config:
     blue_0:
-      start_node_id: 144
+      start_node_id: 3
     blue_1:
-      start_node_id: 23
+      start_node_id: 0
     blue_2:
-      start_node_id: 182
+      start_node_id: 11
     blue_3:
-      start_node_id: 186
+      start_node_id: 10
     blue_4:
-      start_node_id: 183
+      start_node_id: 186
 flags:
   real_positions:
-  - 144
-  - 30
+  - 16
   - 193
+  - 26
   candidate_positions: &id001
-  - 144
-  - 30
+  - 16
   - 193
-  - 19
-  - 4
+  - 26
+  - 198
+  - 9
 environment:
   graph_name: osm_200_a.pkl
   blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
+  visibility_models:
+    red_flag_r400:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 400
+    blue_agent_r250:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 250
+    blue_tower_r450:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 450
 generator:
-  id: 94465ee286
-  ts: '2026-05-14 13:08:04'
+  id: 1248a49e0d
+  ts: '2026-07-13 23:26:32'
   cafl:
   - 12
   - 5

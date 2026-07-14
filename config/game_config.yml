@@ -8,6 +8,7 @@ visualization:
   video_frames_per_step: 5            # Frames per game step (5/20fps = 0.25s per step, always equal regardless of wall-clock speed)
   draw_node_id: false               # Whether to display node IDs on visualization
   visualization_engine: "PYGAME"   # Visualization backend to use
+  sensor_region_edges: true         # Draw a connecting line between two in-region nodes that share a graph edge
   sizes:
     flag_size: 18
     global_agent_size: 13

@@ -7,11 +7,13 @@ try:
     from lib.visual.agent_visual import AgentVisual
     from lib.visual.flag_visual import FlagVisual
     from lib.visual.map_overlay_visual import MapOverlayVisual
+    from lib.visual.building_visual import BuildingVisual
 except ImportError:
     from ..core.console import *
     from ..visual.agent_visual import AgentVisual
     from ..visual.flag_visual import FlagVisual
     from ..visual.map_overlay_visual import MapOverlayVisual
+    from ..visual.building_visual import BuildingVisual
 
 
 @typechecked
@@ -22,19 +24,40 @@ class VisEngine:
     Delegates specialized rendering to AgentVisual and FlagVisual.
     """
 
-    def __init__(self, ctx: Any, config: Dict[str, Any]):
+    def __init__(self, ctx: Any, config: Dict[str, Any], graph: Optional[Any] = None, vis: bool = True):
         """
         Initialize the Visualization Engine.
 
         Args:
             ctx: Game context object with visualization capabilities
             config: Complete configuration dictionary
+            graph: The game's networkx graph, if already loaded (needed to look
+                up line_of_sight visibility ranges/buildings for the
+                building-occluded visibility polygon and building-footprint
+                drawing; None disables those, falling back to the plain
+                euclidean-radius halo).
+            vis: If False (headless/no-vis run), skip resolving buildings and
+                line_of_sight ranges entirely in the visual layer — those are
+                only ever drawn by render callbacks that never fire without a
+                display, so building them would just waste an OSM
+                fetch/geometry index for nothing.
         """
         debug("Initializing VisEngine")
         self.ctx = ctx
         self.config = config
+        self.graph = graph
         self.vis_config = config.get("visualization", {})
         self.env_config = config.get("environment", {})
+
+        # Independent of `vis`: the building-occluded visibility polygon +
+        # building-footprint overlay are real per-frame geometry work (see
+        # lib/core/visibility_polygon.py), noticeably heavier than the rest
+        # of rendering. `vis=True` still shows agents/flags/HUD as normal;
+        # this just lets a config opt out of the extra cost while keeping a
+        # display, e.g. for smoother interactive use in launch_gui.py.
+        # Default on — matches every behavior before this switch existed.
+        show_occlusion_visuals = self.vis_config.get("show_occlusion_visuals", True)
+        occlusion_vis_enabled = vis and show_occlusion_visuals
 
         # Store visualization settings
         self.draw_node_id = self.vis_config.get("draw_node_id", False)
@@ -53,8 +76,9 @@ class VisEngine:
         self._extract_agent_properties()
 
         # Initialize specialized visual handlers
-        self.agent_visual = AgentVisual(ctx, config, self.agent_properties, self.team_properties)
-        self.flag_visual = FlagVisual(ctx, config)
+        self.agent_visual = AgentVisual(ctx, config, self.agent_properties, self.team_properties, graph, occlusion_vis_enabled)
+        self.flag_visual = FlagVisual(ctx, config, graph, occlusion_vis_enabled)
+        self.building_visual = BuildingVisual(ctx, config, graph, occlusion_vis_enabled)
 
         # HUD state
         hud_config = self.vis_config.get("hud", {})
@@ -156,6 +180,13 @@ class VisEngine:
             flags_config: Dictionary from the config file's 'flags' section.
         """
         self.flag_visual.create_flags(flags_config)
+
+    def create_buildings(self) -> None:
+        """
+        Draw the building footprints behind any line_of_sight visibility
+        model, if the config declares one. No-op otherwise.
+        """
+        self.building_visual.create_buildings()
 
     def create_agent_labels(self, agents_config: Dict[str, Any]) -> None:
         """

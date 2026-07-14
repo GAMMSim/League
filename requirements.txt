@@ -9,6 +9,10 @@ typeguard>=4.0
 pyyaml>=6.0
 shapely>=2.0
 
+# ── Line-of-sight visibility (building-occlusion) generator ────────────────────
+osmnx>=2.0
+pyproj>=3.6
+
 # ── GUI launcher (launch_gui.py) ──────────────────────────────────────────────
 # Requires tkinter (not a pip package).
 #   macOS (Homebrew Python): brew install python-tk@3.12

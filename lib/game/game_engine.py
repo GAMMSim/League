@@ -14,6 +14,7 @@ try:
     from lib.game.interaction_engine import InteractionEngine
     from lib.game.visualization_engine_new import VisEngine
     from lib.core.logger import Logger
+    from lib.sensor.base_sensor import set_clock as set_carrier_clock
 except ImportError:
     from ..core.console import *
     from ..core.apsp_cache import get_apsp_length_cache, get_cached_distance
@@ -22,6 +23,7 @@ except ImportError:
     from ..game.interaction_engine import InteractionEngine
     from .visualization_engine_new import VisEngine
     from ..core.logger import Logger
+    from ..sensor.base_sensor import set_clock as set_carrier_clock
 
 
 @typechecked
@@ -53,6 +55,10 @@ class GameEngine:
         self.time_counter = 0
         self.is_running = False
         self.game_terminated = False
+
+        # Enable the once-per-tick memo for shared static carrier sensors: a
+        # sensor sense()'d again within the same tick reuses its cached result.
+        set_carrier_clock(lambda: self.time_counter)
 
         # Game configuration
         self.game_config = config.get("game", {})
@@ -215,7 +221,7 @@ class GameEngine:
             pass  # Some contexts may not expose this; safe to ignore
 
         # 2) Visualization
-        vis_engine = VisEngine(ctx, config)
+        vis_engine = VisEngine(ctx, config, graph=graph, vis=vis)
 
         # 3) Sensors
         sensor_engine = SensorEngine(ctx, config, graph)
@@ -244,6 +250,7 @@ class GameEngine:
         record_video: bool = False,
         vis: bool = True,
         tiff_path: Optional[str] = None,
+        show_occlusion_visuals: Optional[bool] = None,
     ) -> "GameEngine":
         """
         One-liner runner that mirrors the old __main__ behavior but keeps the call-site clean.
@@ -254,6 +261,12 @@ class GameEngine:
             record_file: If True, record the game session to a .ggr file. Recording is independent of logging.
             record_video: If True, capture rendered frames in real time and export an MP4 to the repo root.
             vis: If True, use PYGAME visualization. If False, use NO_VIS mode.
+            show_occlusion_visuals: Overrides the config's `visualization.show_occlusion_visuals`
+                (see lib/game/visualization_engine_new.py) — the building-occluded visibility
+                polygon/glow is real per-frame geometry, expensive enough to make an interactive
+                window choppy. None (default) leaves whatever the config file says (or its own
+                default of True) alone; pass True/False to force it regardless of the config,
+                e.g. launch_gui.py forces False for smooth interactive play.
         """
         # Lazily import loader/utilities here
         from lib.config.config_loader import ConfigLoader
@@ -283,6 +296,9 @@ class GameEngine:
         if extra_defs:
             loader.load_extra_definitions(extra_defs, force=True)
         config = loader.config_data
+
+        if show_occlusion_visuals is not None:
+            config.setdefault("visualization", {})["show_occlusion_visuals"] = show_occlusion_visuals
 
         if vis and record_video:
             os.environ.setdefault("SDL_VIDEO_WINDOW_POS", "0,0")
@@ -395,20 +411,28 @@ class GameEngine:
                                     warning(f"Frame capture failed during video recording: {e}")
                                     frame_capture_error_reported = True
 
+                        alpha_update_error_reported = False
+
                         def _patched_simulate() -> None:
+                            nonlocal alpha_update_error_reported
                             n = video_frames_per_step
                             # _toggle_waiting_simulation(True) sets _waiting_simulation=True
-                            # and _alpha=0 on every agent artist, which tells the drawer to
+                            # and _alpha=0 on every dynamic artist, which tells the drawer to
                             # lerp between prev_node_id and current_node_id using _alpha.
+                            # _dynamic_artists (not _agent_artists — that attribute doesn't
+                            # exist on gamms' PygameVisualizationEngine) mirrors exactly what
+                            # the real simulate()/handle_tick() updates.
                             visual_obj._toggle_waiting_simulation(True)
                             visual_obj._simulation_time = 0.0
                             for i in range(n):
                                 alpha = (i + 1) / n
                                 try:
-                                    for artist in visual_obj._agent_artists.values():
+                                    for artist in visual_obj._dynamic_artists.values():
                                         artist.data["_alpha"] = alpha
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    if not alpha_update_error_reported:
+                                        warning(f"Failed to update animation alpha during video recording: {e}")
+                                        alpha_update_error_reported = True
                                 try:
                                     visual_obj.handle_input()
                                     visual_obj.handle_single_draw()
@@ -491,6 +515,7 @@ class GameEngine:
             return
         try:
             self.vis_engine.setup_agent_visuals(agent_config)
+            self.vis_engine.create_buildings()
             self.vis_engine.create_flags(self.flag_config)
             self.vis_engine.create_agent_labels(agent_config)
             self.vis_engine.create_agent_sensor_circles()
@@ -587,9 +612,9 @@ class GameEngine:
                 # strategies never need to do color-string filtering themselves.
                 se = self.agent_engine.sensor_engine
                 sensors = state.get("sensor", {})
+                enemy_team = agent_controller.enemy_team
+                own_team = agent_controller.team
                 if se is not None and se.agent_type_sensor_names:
-                    enemy_team = agent_controller.enemy_team
-                    own_team = agent_controller.team
                     for sname in se.agent_type_sensor_names:
                         if sname in sensors:
                             sid, payload = sensors[sname]
@@ -599,26 +624,49 @@ class GameEngine:
                                     "teammates": {n: p for n, p in payload.items() if n.startswith(own_team)},
                                 })
 
+                # Region sensors (docs/sensor_redesign_handoff.md §3.5): split
+                # each one's own "detected_agents" into enemies/teammates IN
+                # PLACE, keeping region/model/detected_flags intact (unlike the
+                # agent-type split above, which replaces the whole payload —
+                # region payloads carry more than just agent positions).
+                if se is not None and se.region_sensor_names:
+                    for sname in se.region_sensor_names:
+                        if sname in sensors:
+                            sid, payload = sensors[sname]
+                            if isinstance(payload, dict) and "detected_agents" in payload:
+                                agents = payload["detected_agents"]
+                                payload["enemies"] = {n: p for n, p in agents.items() if n.startswith(enemy_team)}
+                                payload["teammates"] = {n: p for n, p in agents.items() if n.startswith(own_team)}
+
                 # Consolidate all stationary_* sensor payloads under state["sensor"]["stationary"]:
                 #   "detections": list of per-sensor entries (original payloads)
                 #   "enemies"/"teammates": flat {name: node_id} aggregated across all sensors,
                 #     pre-filtered by team so strategies need no loop or color-string filtering.
+                # detected_agents entries come in two shapes depending on which
+                # sensor class produced them: StationarySensor's legacy
+                # {name: {node_id, distance}} or RegionSensor's flatter
+                # {name: node_id} (already split into enemies/teammates above,
+                # in which case detected_agents is left untouched — read those
+                # instead of re-deriving from it).
                 stationary = [
                     sensors[sname][1]
                     for sname in sensors
                     if sname.startswith("stationary_")
                 ]
                 if stationary:
-                    enemy_team = agent_controller.enemy_team
-                    own_team = agent_controller.team
                     enemies: Dict[str, int] = {}
                     teammates: Dict[str, int] = {}
                     for entry in stationary:
+                        if "enemies" in entry or "teammates" in entry:
+                            enemies.update(entry.get("enemies", {}))
+                            teammates.update(entry.get("teammates", {}))
+                            continue
                         for name, data in entry.get("detected_agents", {}).items():
+                            node_id = data["node_id"] if isinstance(data, dict) else data
                             if name.startswith(enemy_team):
-                                enemies[name] = data["node_id"]
+                                enemies[name] = node_id
                             elif name.startswith(own_team):
-                                teammates[name] = data["node_id"]
+                                teammates[name] = node_id
                     sensors["stationary"] = (None, {
                         "detections": stationary,
                         "enemies": enemies,

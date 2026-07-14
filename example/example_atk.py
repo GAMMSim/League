@@ -50,7 +50,7 @@ def strategy(state: dict) -> str:
     visible_edges: List[Any]      = agent_ctrl.sensor_data(state, "egocentric_flag_region")["edges"] if "egocentric_flag_region" in sensors else []   # Edges within sensing radius
 
     detected_flags: List[int] = agent_ctrl.sensor_data(state, "egocentric_flag")["detected_flags"] if "egocentric_flag" in sensors else []  # Real flags within range; flags visible to agent
-    flag_count: int           = agent_ctrl.sensor_data(state, "egocentric_flag")["flag_count"]      if "egocentric_flag" in sensors else 0   # Number of detected flags
+    flag_count: int           = agent_ctrl.sensor_data(state, "egocentric_flag").get("flag_count", len(detected_flags)) if "egocentric_flag" in sensors else 0   # Number of detected flags (region-sensor payloads don't carry this key; derive it)
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
