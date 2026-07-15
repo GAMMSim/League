@@ -46,11 +46,11 @@ def strategy(state: dict) -> str:
     enemies: Dict[str, int]   = agent_ctrl.sensor_data(state, "agent")["enemies"]   if "agent" in sensors else {}  # Enemy agents in game {name: node_id}
     teammates: Dict[str, int] = agent_ctrl.sensor_data(state, "agent")["teammates"] if "agent" in sensors else {}  # Teammate agents in game {name: node_id}
 
-    visible_nodes: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_flag_region")["nodes"] if "egocentric_flag_region" in sensors else {}  # Nodes within sensing radius
-    visible_edges: List[Any]      = agent_ctrl.sensor_data(state, "egocentric_flag_region")["edges"] if "egocentric_flag_region" in sensors else []   # Edges within sensing radius
-
     detected_flags: List[int] = agent_ctrl.sensor_data(state, "egocentric_flag")["detected_flags"] if "egocentric_flag" in sensors else []  # Real flags within range; flags visible to agent
     flag_count: int           = agent_ctrl.sensor_data(state, "egocentric_flag").get("flag_count", len(detected_flags)) if "egocentric_flag" in sensors else 0   # Number of detected flags (region-sensor payloads don't carry this key; derive it)
+
+    egocentric_flag_visibility_graph: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_flag").get("table", {}) if "egocentric_flag" in sensors else {}  # SAME sensor as above, extra key: FULL node -> visible-nodes table (line-of-sight), static for the whole game
+    visible_from_here = egocentric_flag_visibility_graph.get(current_pos, frozenset())  # Visible nodes from curr_pos specifically — look up any node the same way
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
@@ -81,8 +81,6 @@ def strategy(state: dict) -> str:
 
     # How to get all positions of a team from agent map
     teammates_data: List[Tuple[str, int, int]] = agent_map.get_team_agents(team)            # [(name, pos, age)] of teammates
-    # How to get a specific agent's position from agent map
-    enemy_pos, enemy_age = agent_map.get_agent_position(agent_ctrl.enemy_team, "blue_0")  # (position, age_in_timesteps) or (None, None)
 
     # ===== DECISION LOGIC =====
     target: int = current_pos  # Default action is to stay at current position

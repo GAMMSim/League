@@ -216,12 +216,30 @@ class SensorEngine:
             this env list" without knowing the count/positions up front —
             same trick the legacy `stationary` sentinel uses internally.
 
+        Every RegionSensor payload also carries the model's FULL node->visible-
+        nodes table under `"table"` (see lib/sensor/region_sensor.py), alongside
+        `"region"` (just the current origin's slice) — same sensor, same name,
+        no separate whole-graph sensor to declare or learn.
+
         Returns:
             Dict mapping logical sensor names to their IDs for registration
         """
         debug(f"Creating sensors for agent {agent_name}")
 
         sensor_mappings: Dict[str, str] = {}
+
+        def _add_mapping(logical_name: str, sensor_id: str) -> None:
+            # Two config entries reusing the same logical name would otherwise
+            # silently clobber each other here (only the last survives into
+            # state["sensor"]).
+            existing = sensor_mappings.get(logical_name)
+            if existing is not None and existing != sensor_id:
+                warning(
+                    f"Sensor entry '{logical_name}' for {agent_name} overwrites "
+                    f"an earlier sensor with the same logical name ('{existing}' "
+                    f"-> '{sensor_id}') — give each entry a distinct 'name:'"
+                )
+            sensor_mappings[logical_name] = sensor_id
 
         for entry in sensor_list:
             try:
@@ -231,20 +249,20 @@ class SensorEngine:
                             agent_name, team, sub_entry
                         )
                         if sensor_id:
-                            sensor_mappings[logical_name] = sensor_id
+                            _add_mapping(logical_name, sensor_id)
                 elif isinstance(entry, dict):
                     logical_name, sensor_id = self._create_unified_sensor(
                         agent_name, team, entry
                     )
                     if sensor_id:
-                        sensor_mappings[logical_name] = sensor_id
+                        _add_mapping(logical_name, sensor_id)
                 else:
                     logical_name = entry
                     sensor_id = self._create_single_sensor(
                         agent_name, team, entry, sensing_radius
                     )
                     if sensor_id:
-                        sensor_mappings[logical_name] = sensor_id
+                        _add_mapping(logical_name, sensor_id)
             except Exception as e:
                 warning(f"Failed to create sensor '{entry}' for {agent_name}: {e}")
                 continue
@@ -313,7 +331,9 @@ class SensorEngine:
         precomputed table under environment.visibility_models — radius, k-hop,
         and line-of-sight are all just generators that build one, so there is
         a single region-sensor path regardless of which generator built the
-        table (see lib/core/visibility_generators.py).
+        table (see lib/core/visibility_generators.py). The payload carries
+        both `region` (current origin's slice) and `table` (the full model) —
+        see lib/sensor/region_sensor.py.
         """
         model = entry.get("model")
         table = self._vis_models.get(model) if model else None

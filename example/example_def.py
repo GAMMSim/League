@@ -48,13 +48,14 @@ def strategy(state: dict) -> str:
     nearby_enemies: Dict[str, int]   = agent_ctrl.sensor_data(state, "egocentric_agent")["enemies"]   if "egocentric_agent" in sensors else {}  # Enemy agents within sensing radius
     nearby_teammates: Dict[str, int] = agent_ctrl.sensor_data(state, "egocentric_agent")["teammates"] if "egocentric_agent" in sensors else {}  # Teammates within sensing radius
 
-    visible_nodes: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_agent_region")["nodes"] if "egocentric_agent_region" in sensors else {}  # Nodes within sensing radius
-    visible_edges: List[Any]      = agent_ctrl.sensor_data(state, "egocentric_agent_region")["edges"] if "egocentric_agent_region" in sensors else []   # Edges within sensing radius
+    egocentric_agent_visibility_graph: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_agent").get("table", {}) if "egocentric_agent" in sensors else {}  # SAME sensor as above, extra key: FULL node -> visible-nodes table for blue_agent_r250 (line-of-sight), static for the whole game
+    visible_from_here = egocentric_agent_visibility_graph.get(current_pos, frozenset())  # Visible nodes from curr_pos specifically — look up any node the same way
 
     # Stationary sensors — pre-consolidated by game engine and pre-filtered by team
-    # {"enemies": {name: node_id}, "teammates": {name: node_id}, "detections": [per-sensor entries]}
+    # {"enemies": {name: node_id}, "teammates": {name: node_id}, "detections": [per-sensor entries], "table": full blue_tower_r450 visibility table}
     # Each per-sensor entry: {"fixed_position": int, "detected_agents": {name: {node_id, distance}}, "agent_count": int, "covered_nodes": [...]}
     stationary: Dict[str, Any] = agent_ctrl.sensor_data(state, "stationary") or {"enemies": {}, "teammates": {}, "detections": []}
+    stationary_visibility_graph: Dict[int, Any] = stationary.get("table", {})  # A second, DIFFERENT visibility graph (blue_tower_r450) — same "stationary" sensor read below, name matches the sensor it came from
     stationary_enemies: Dict[str, int] = stationary["enemies"]      # {name: node_id} of attackers seen by any stationary sensor
     stationary_detections: List[Dict[str, Any]] = stationary["detections"]  # raw per-sensor entries
 
@@ -89,8 +90,6 @@ def strategy(state: dict) -> str:
 
     # How to get all positions of a team from agent map
     teammates_data: List[Tuple[str, int, int]] = agent_map.get_team_agents(team)            # [(name, pos, age)] of teammates
-    # How to get a specific agent's position from agent map
-    enemy_pos, enemy_age = agent_map.get_agent_position(agent_ctrl.enemy_team, "red_0")  # (position, age_in_timesteps) or (None, None)
 
     # ===== DECISION LOGIC =====
     target: int = current_pos  # Default action is to stay at current position

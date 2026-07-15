@@ -38,7 +38,8 @@ def create_region_sensor_class(ctx):
                 "carrier": self._carrier,
                 "team": self.team,
                 "model": self._model,
-                "region": region,                 # set/frozenset[int] of visible nodes
+                "region": region,                 # set/frozenset[int] of visible nodes from THIS origin
+                "table": self._table,              # FULL node -> visible-nodes table this model builds from (same sensor, no separate name to learn)
                 "detected_agents": agents,
             }
             if self._flags:

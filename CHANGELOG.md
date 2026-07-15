@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.05.1]
+
+### New
+
+- **`RegionSensor` payloads now carry a `table` key** (`lib/sensor/region_sensor.py`) alongside `region`: the full `node_id -> frozenset[visible_node_ids]` map for that sensor's model, not just the current origin's slice. Same sensor, no new name to learn — e.g. `agent_ctrl.sensor_data(state, "egocentric_flag")["table"]` gives the whole `red_flag_r400` visibility graph, so a strategy can look up "what's visible from node X" for any node, not just its own position. Static for the whole game, safe to cache once read. `state["sensor"]["stationary"]` (`lib/game/game_engine.py`) also now carries a `table` key (hoisted from the shared tower model), alongside the existing `enemies`/`teammates`/`detections`. Only affects sensors declared in the dict config form; plain string sensor entries are unaffected (no `table` key, same as before). See `example/example_atk.py` / `example/example_def.py` for a worked example.
+- **`lib/game/sensor_engine.py`**: `create_sensors_for_agent` now warns (via a new `_add_mapping` helper) instead of silently overwriting when two sensor entries for the same agent reuse the same logical `name:` — previously the second entry would clobber the first in `state["sensor"]` with no indication anything was lost.
+
+### Changed
+
+- `example/example_atk.py` / `example/example_def.py`: updated to read the new `table` key; removed a stray example line that looked up a hardcoded agent name (`agent_map.get_agent_position(enemy_team, "blue_0")`/`"red_0"`) that didn't generalize past the specific example config.
+
 ## [6.05]
 
 ### Notice

@@ -671,6 +671,11 @@ class GameEngine:
                         "detections": stationary,
                         "enemies": enemies,
                         "teammates": teammates,
+                        # All towers share one model -> identical table reference;
+                        # hoisted here so it's read the same way as everything else
+                        # under "stationary" (only present for RegionSensor-backed
+                        # towers, not the legacy StationarySensor).
+                        "table": stationary[0].get("table", {}),
                     })
 
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:
