@@ -1,6 +1,6 @@
 game:
-  game_rule: v1.2
-  max_time: 100
+  game_rule: v1.4
+  max_time: 75
   interaction_model:
     tagging: both_kill
     capture: kill
@@ -20,12 +20,15 @@ agents:
     sensors:
     - global_map
     - candidate_flag
-    - agent
+    - custom_team
+    - name: egocentric_agent
+      model: red_agent_r400
+      carrier: agent
+      team: red
     - name: egocentric_flag
       model: red_flag_r400
       carrier: agent
       flags: real
-    - egocentric_flag_region
   blue_global:
     speed: 1
     tagging_radius: 1
@@ -37,46 +40,49 @@ agents:
       model: blue_agent_r250
       carrier: agent
       team: blue
-    - egocentric_agent_region
     - flag
     - name: stationary
       model: blue_tower_r450
       at: blue_static_sensor_positions
   red_config:
     red_0:
-      start_node_id: 40
+      start_node_id: 152
     red_1:
-      start_node_id: 70
-    red_2:
-      start_node_id: 79
-    red_3:
       start_node_id: 76
+    red_2:
+      start_node_id: 75
+    red_3:
+      start_node_id: 97
     red_4:
-      start_node_id: 123
+      start_node_id: 79
   blue_config:
     blue_0:
-      start_node_id: 26
+      start_node_id: 13
     blue_1:
-      start_node_id: 144
+      start_node_id: 180
     blue_2:
-      start_node_id: 19
+      start_node_id: 24
     blue_3:
-      start_node_id: 198
+      start_node_id: 21
     blue_4:
-      start_node_id: 11
+      start_node_id: 25
 flags:
   real_positions:
-  - 35
+  - 10
   candidate_positions: &id001
-  - 35
-  - 36
-  - 198
+  - 10
+  - 11
+  - 16
 environment:
   graph_name: osm_200_a.pkl
   blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
   visibility_models:
     red_flag_r400:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 400
+    red_agent_r400:
       type: line_of_sight
       crs: EPSG:32618
       max_range: 400
@@ -89,8 +95,8 @@ environment:
       crs: EPSG:32618
       max_range: 450
 generator:
-  id: 2ff96a370f
-  ts: '2026-07-13 23:25:22'
+  id: 6bb7a48656
+  ts: '2026-09-28 09:42:48'
   cafl:
   - 12
   - 3

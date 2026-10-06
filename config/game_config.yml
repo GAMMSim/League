@@ -36,6 +36,3 @@ agents:
   blue_global:
     color: [50, 100, 220]
     size: 13
-
-game:
-  max_time: 100

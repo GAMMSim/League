@@ -87,6 +87,7 @@ class VisEngine:
         self._hud_line_h = hud_config.get("line_height", 18)
         self._hud_font_size = hud_config.get("font_size", 14)
         self._hud_max_events = hud_config.get("max_events", 8)
+        self._hud_render_failed = False  # one-shot guard for _render_hud's error log
         self._hud_events: List[Tuple[str, tuple]] = []  # (text, rgb_color)
         self._hud_payoff = {"total": 0.0, "tag": 0.0, "capture": 0.0, "discover": 0.0}
         self._hud_artist_created = False
@@ -379,8 +380,14 @@ class VisEngine:
                 surf = font.render(text, True, color)
                 surface.blit(surf, (x, y))
                 y += line_h
-        except Exception:
-            pass
+        except Exception as e:
+            # Never let a HUD glitch take down the render loop -- but say so
+            # once. This is a per-frame artist callback, so logging every
+            # failure would flood the console; a silent `pass` here used to
+            # make a broken HUD indistinguishable from an empty one.
+            if not self._hud_render_failed:
+                self._hud_render_failed = True
+                warning(f"HUD rendering failed ({type(e).__name__}: {e}); HUD will stay blank for this run")
 
     def __str__(self) -> str:
         """String representation of the VisEngine."""

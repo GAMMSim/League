@@ -1,6 +1,6 @@
 game:
-  game_rule: v1.2
-  max_time: 100
+  game_rule: v1.4
+  max_time: 75
   interaction_model:
     tagging: both_kill
     capture: kill
@@ -20,12 +20,15 @@ agents:
     sensors:
     - global_map
     - candidate_flag
-    - agent
+    - custom_team
+    - name: egocentric_agent
+      model: red_agent_r400
+      carrier: agent
+      team: red
     - name: egocentric_flag
       model: red_flag_r400
       carrier: agent
       flags: real
-    - egocentric_flag_region
   blue_global:
     speed: 1
     tagging_radius: 1
@@ -37,42 +40,45 @@ agents:
       model: blue_agent_r250
       carrier: agent
       team: blue
-    - egocentric_agent_region
     - flag
     - name: stationary
       model: blue_tower_r450
       at: blue_static_sensor_positions
   red_config:
     red_0:
-      start_node_id: 68
+      start_node_id: 125
     red_1:
-      start_node_id: 38
+      start_node_id: 79
     red_2:
-      start_node_id: 88
+      start_node_id: 120
   blue_config:
     blue_0:
-      start_node_id: 144
+      start_node_id: 165
     blue_1:
-      start_node_id: 186
+      start_node_id: 199
     blue_2:
-      start_node_id: 25
+      start_node_id: 21
 flags:
   real_positions:
-  - 31
-  - 4
+  - 32
   - 14
+  - 182
   candidate_positions: &id001
-  - 31
-  - 4
+  - 32
   - 14
-  - 13
-  - 185
+  - 182
+  - 22
+  - 186
 environment:
   graph_name: osm_200_a.pkl
   blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
   visibility_models:
     red_flag_r400:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 400
+    red_agent_r400:
       type: line_of_sight
       crs: EPSG:32618
       max_range: 400
@@ -85,8 +91,8 @@ environment:
       crs: EPSG:32618
       max_range: 450
 generator:
-  id: ee1b1809a4
-  ts: '2026-07-13 23:24:58'
+  id: 90b0f77ad8
+  ts: '2026-09-28 09:42:33'
   cafl:
   - 12
   - 5

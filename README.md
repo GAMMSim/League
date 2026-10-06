@@ -65,9 +65,9 @@ pip install -r requirements.txt
 | Core simulation | `gamms`, `networkx`, `numpy`, `typeguard`, `pyyaml`, `shapely` | All game modes |
 | GUI launcher | `matplotlib` | `launch_gui.py` |
 | Strategy policies | `scipy` | Policies under `policies/` |
-| Mass evaluation | `pandas`, `seaborn`, `imageio` | `mass_eval/` scripts (optional) |
+| Analysis (optional) | `pandas`, `seaborn`, `imageio`, `cvxpy` | Not needed to run games or the runtime check |
 
-> The mass-eval packages are optional — the core engine and GUI run without them.
+> The analysis packages are optional — the core engine, the GUI and `check_policy.py` run without them.
 
 ---
 
@@ -95,7 +95,7 @@ Edit `main.py` directly to hard-code your selections (see section 3).
 
 ```python
 result = GameEngine.launch_from_files(
-    config_main="example/example_config.yml",
+    config_main="config/example_configs/osm_a/R3B3F3-5/R3B3F3-5_run0.yml",
     extra_defs="config/game_config.yml",
     red_strategy="example.example_atk",
     blue_strategy="example.example_def",
@@ -128,6 +128,14 @@ Strategies live under `example/` or `policies/attacker|defender/` and are refere
 - `example.example_atk` / `example.example_def`
 - `policies.attacker.gmu_atk_r3`
 - `policies.defender.uncc_def_F_r3`
+
+`policies/attacker/` and `policies/defender/` are empty at the moment — the
+previous round's policies were archived when game rule v1.4 landed. Start from
+`example/example_atk.py` and `example/example_def.py`, which show the current
+sensor reads. They are also simple working opponents: the attacker searches
+the candidate flags as a team and keeps out of defenders' reach; the defender
+guards the most dangerous flag and steps out to tag an attacker that comes
+near it.
 
 ### Required interface
 
@@ -164,7 +172,7 @@ def map_strategy(agent_config):
 
 ## 5. Config file guide
 
-Use `example/example_config.yml` as a starting point.
+Game configs live under `config/example_configs/<map>/<scenario>/` and are generated from a rule template in `config/rules/`. Copy one as a starting point rather than writing a config from scratch. `example/` holds strategies only.
 
 | Section | Key fields |
 | --- | --- |
@@ -180,14 +188,63 @@ Configs live in `config/` (excluding `archive/` and `rules/`). The GUI auto-disc
 
 ## 6. Typical workflow
 
-1. Pick a config in the GUI (or copy `example/example_config.yml` and edit it).
+1. Pick a config in the GUI (or copy one from `config/example_configs/` and edit it).
 2. Select attacker and defender strategies from the dropdowns.
 3. Set logging, recording, and visualization options.
 4. Click **RUN GAME**.
 
 ---
 
-## 7. Quick checks if something fails
+## 7. Check your policy's runtime before submitting
+
+A policy that is too slow to evaluate is not accepted into a tournament. Check
+yours on your own machine first:
+
+```bash
+python check_policy.py policies.attacker.my_atk --team red
+python check_policy.py policies.defender.my_def --team blue
+python check_policy.py policies.attacker.my_atk --team red --quick   # 1 game per size, for a fast look
+```
+
+It plays your policy over all 30 configs in `config/example_configs/` against
+the example policy for the other team, times every call to your `strategy`,
+and prints a table. A full run of a fast policy takes well under a minute. It
+also writes a report you can open in a browser:
+`reports/<policy>_<team>.html`. **Send that file with your submission**, one
+for each policy.
+
+**Limits.** Times are measured in *machine units*: the script first times a
+fixed workload on your machine (about a second) and divides every measurement
+by it, so the same limits hold on a laptop and on a server.
+
+| Limit | Machine units | What it covers |
+| --- | --- | --- |
+| Mean per call | 0.01 | Average over all calls after each agent's first |
+| Slowest call | 0.5 | Any single call after each agent's first |
+| First call | 2.0 | Each agent's first call, where one-time setup belongs |
+
+The limits are in `config/perf_budget.yml`.
+
+**What fails a policy:**
+
+- Any limit exceeded at any team size (R1B1, R3B3, R5B5).
+- Any exception from `strategy`, a return value that is not a `str`, or an
+  action that is not an `int`. In a normal game the engine catches these and
+  leaves the agent standing still; the check does not let that pass.
+- A single call longer than 20 units, or a game longer than 200 units. Either
+  one stops the check.
+
+**Notes:**
+
+- Work your policy saves to disk and reuses is counted on the run that does
+  the work. Run the check from a clean state to see what a first run costs.
+- The report also shows your mean payoff against the example opponent. It is
+  there so you can see that the policy is playing, not as part of the verdict.
+- On Windows a call that never returns has to be stopped with Ctrl-C.
+
+---
+
+## 8. Quick checks if something fails
 
 | Symptom | Likely cause |
 | --- | --- |

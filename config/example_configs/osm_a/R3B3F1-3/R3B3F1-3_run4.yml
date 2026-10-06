@@ -1,6 +1,6 @@
 game:
-  game_rule: v1.2
-  max_time: 100
+  game_rule: v1.4
+  max_time: 75
   interaction_model:
     tagging: both_kill
     capture: kill
@@ -20,12 +20,15 @@ agents:
     sensors:
     - global_map
     - candidate_flag
-    - agent
+    - custom_team
+    - name: egocentric_agent
+      model: red_agent_r400
+      carrier: agent
+      team: red
     - name: egocentric_flag
       model: red_flag_r400
       carrier: agent
       flags: real
-    - egocentric_flag_region
   blue_global:
     speed: 1
     tagging_radius: 1
@@ -37,30 +40,29 @@ agents:
       model: blue_agent_r250
       carrier: agent
       team: blue
-    - egocentric_agent_region
     - flag
     - name: stationary
       model: blue_tower_r450
       at: blue_static_sensor_positions
   red_config:
     red_0:
-      start_node_id: 174
+      start_node_id: 104
     red_1:
-      start_node_id: 78
+      start_node_id: 145
     red_2:
-      start_node_id: 42
+      start_node_id: 76
   blue_config:
     blue_0:
       start_node_id: 30
     blue_1:
-      start_node_id: 25
+      start_node_id: 183
     blue_2:
-      start_node_id: 193
+      start_node_id: 85
 flags:
   real_positions:
-  - 20
+  - 26
   candidate_positions: &id001
-  - 20
+  - 26
   - 4
   - 30
 environment:
@@ -69,6 +71,10 @@ environment:
   blue_static_sensor_positions: *id001
   visibility_models:
     red_flag_r400:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 400
+    red_agent_r400:
       type: line_of_sight
       crs: EPSG:32618
       max_range: 400
@@ -81,8 +87,8 @@ environment:
       crs: EPSG:32618
       max_range: 450
 generator:
-  id: 37cf0a64de
-  ts: '2026-07-13 23:24:39'
+  id: 89d6f58e5b
+  ts: '2026-09-28 09:42:08'
   cafl:
   - 12
   - 3

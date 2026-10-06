@@ -15,6 +15,7 @@ from lib.sensor.stationary_sensor import create_stationary_sensor_class
 from lib.sensor.team_sensor import create_team_agent_sensor
 from lib.sensor.base_sensor import DYNAMIC
 from lib.sensor.region_sensor import create_region_sensor_class
+from lib.sensor.region_view_sensor import create_region_view_sensor_class
 from lib.core.visibility_cache import get_visibility_models
 
 
@@ -57,6 +58,17 @@ class SensorEngine:
         # region/model/detected_flags too, unlike agent_type_sensor_names which
         # replaces the whole payload).
         self.region_sensor_names: Set[str] = set()
+
+        # {agent_name: [RegionSensor, ...]} — the model-backed sensors each agent
+        # detects real flags with (entries declaring `flags: real`). Flag
+        # discovery reads these so it credits exactly what the sensor reports.
+        self._flag_sensors: Dict[str, List[Any]] = {}
+
+        # Shared by every RegionViewSensor (`<name>_region`) in this game: the
+        # gamms node/edge objects (filled on first use), and one {origin: view}
+        # cache per visibility model.
+        self._graph_index: Dict[str, Any] = {}
+        self._region_view_caches: Dict[str, Dict[int, Any]] = {}
         
         # Register custom sensor classes
         self._register_custom_sensor_classes()
@@ -79,6 +91,7 @@ class SensorEngine:
             self.StationarySensor = _CUSTOM_SENSOR_CLASS_CACHE["StationarySensor"]
             self.TeamAgentSensor = _CUSTOM_SENSOR_CLASS_CACHE["TeamAgentSensor"]
             self.RegionSensor = _CUSTOM_SENSOR_CLASS_CACHE["RegionSensor"]
+            self.RegionViewSensor = _CUSTOM_SENSOR_CLASS_CACHE["RegionViewSensor"]
             debug("Reusing cached custom sensor classes")
             return
 
@@ -90,6 +103,7 @@ class SensorEngine:
         self.StationarySensor = create_stationary_sensor_class(self.ctx)
         self.TeamAgentSensor = create_team_agent_sensor(self.ctx)
         self.RegionSensor = create_region_sensor_class(self.ctx)
+        self.RegionViewSensor = create_region_view_sensor_class(self.ctx)
 
         _CUSTOM_SENSOR_CLASS_CACHE = {
             "GlobalMapSensor": self.GlobalMapSensor,
@@ -99,6 +113,7 @@ class SensorEngine:
             "StationarySensor": self.StationarySensor,
             "TeamAgentSensor": self.TeamAgentSensor,
             "RegionSensor": self.RegionSensor,
+            "RegionViewSensor": self.RegionViewSensor,
         }
 
         success("Custom sensor classes registered")
@@ -216,6 +231,15 @@ class SensorEngine:
             this env list" without knowing the count/positions up front —
             same trick the legacy `stationary` sentinel uses internally.
 
+          - a string `<name>_region` -> coverage view of sensor `<name>`: the
+              local subgraph {nodes, edges} that sensor covers right now (see
+              lib/sensor/region_view_sensor.py). Resolved after every other
+              entry, so its position in the list does not matter. If `<name>`
+              is not a RegionSensor (the plain-string forms of rule v1.2) it
+              falls back to the gamms euclidean RANGE sensor. Rule v1.3 still
+              declares these; from v1.4 the coverage is read off the sensor
+              itself (`region` / `table`) and no `_region` entry is listed.
+
         Every RegionSensor payload also carries the model's FULL node->visible-
         nodes table under `"table"` (see lib/sensor/region_sensor.py), alongside
         `"region"` (just the current origin's slice) — same sensor, same name,
@@ -241,7 +265,13 @@ class SensorEngine:
                 )
             sensor_mappings[logical_name] = sensor_id
 
-        for entry in sensor_list:
+        # `<name>_region` views read their companion's table, so resolve them last.
+        def _is_view(entry: Any) -> bool:
+            return isinstance(entry, str) and entry.endswith("_region")
+
+        ordered = [e for e in sensor_list if not _is_view(e)] + [e for e in sensor_list if _is_view(e)]
+
+        for entry in ordered:
             try:
                 if isinstance(entry, dict) and "at" in entry:
                     for sub_entry in self._expand_at_entry(entry):
@@ -258,9 +288,13 @@ class SensorEngine:
                         _add_mapping(logical_name, sensor_id)
                 else:
                     logical_name = entry
-                    sensor_id = self._create_single_sensor(
-                        agent_name, team, entry, sensing_radius
-                    )
+                    sensor_id = None
+                    if _is_view(entry):
+                        sensor_id = self._create_region_view(agent_name, entry, sensor_mappings)
+                    if sensor_id is None:
+                        sensor_id = self._create_single_sensor(
+                            agent_name, team, entry, sensing_radius
+                        )
                     if sensor_id:
                         _add_mapping(logical_name, sensor_id)
             except Exception as e:
@@ -365,8 +399,46 @@ class SensorEngine:
             )
             self.ctx.sensor.add_sensor(sensor)
             self.created_sensors[sensor_id] = sensor
+        if flags is not None:
+            agent_flag_sensors = self._flag_sensors.setdefault(agent_name, [])
+            if self.created_sensors[sensor_id] not in agent_flag_sensors:
+                agent_flag_sensors.append(self.created_sensors[sensor_id])
         self.region_sensor_names.add(logical_name)
         return logical_name, sensor_id
+
+    def _create_region_view(
+        self,
+        agent_name: str,
+        sensor_name: str,
+        sensor_mappings: Dict[str, str],
+    ) -> Optional[str]:
+        """
+        Create the coverage view for a `<name>_region` entry from the
+        RegionSensor this agent carries under `<name>`. Returns None when there
+        is no such companion, so the caller can fall back to the legacy sensor.
+        """
+        companion_id = sensor_mappings.get(sensor_name[: -len("_region")])
+        companion = self.created_sensors.get(companion_id) if companion_id else None
+        if not isinstance(companion, self.RegionSensor):
+            return None
+
+        carrier = companion._carrier
+        model = companion._model
+        # Static views are shared/deduped by identity; dynamic are per-agent.
+        sensor_id = (
+            f"u_view_{companion.team}_{model}_{carrier}"
+            if companion.is_static else f"{agent_name}_{sensor_name}"
+        )
+        if sensor_id not in self.created_sensors:
+            sensor = self.RegionViewSensor(
+                self.ctx, sensor_id, table=companion._table,
+                graph_index=self._graph_index,
+                view_cache=self._region_view_caches.setdefault(str(model), {}),
+                team=companion.team, carrier=carrier,
+            )
+            self.ctx.sensor.add_sensor(sensor)
+            self.created_sensors[sensor_id] = sensor
+        return sensor_id
 
     def _create_single_sensor(
         self,
@@ -500,6 +572,25 @@ class SensorEngine:
                 
             except Exception as e:
                 warning(f"Failed to register {sensor_name} to {agent.name}: {e}")
+
+    def flag_sensing_region(self, agent_name: str, node_id: int) -> Optional[Set[int]]:
+        """
+        Nodes in which `agent_name`'s flag sensors would detect a real flag
+        with the agent standing at `node_id` — a lookup in each sensor's own
+        table, so it is occlusion-limited exactly when the sensor is.
+
+        Returns None if the agent has no model-backed flag sensor (rule v1.2's
+        plain-string `egocentric_flag`), in which case range is whatever
+        `sensing_radius` says.
+        """
+        sensors = self._flag_sensors.get(agent_name)
+        if not sensors:
+            return None
+        region: Set[int] = set()
+        for sensor in sensors:
+            origin = sensor._carrier if sensor.is_static else node_id
+            region.update(sensor._table.get(origin, (origin,)))
+        return region
 
     def get_sensor_info(self) -> Dict[str, Any]:
         """Get information about all created sensors"""

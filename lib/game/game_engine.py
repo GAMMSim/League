@@ -174,6 +174,13 @@ class GameEngine:
         from lib.utils.file_utils import export_graph_config, get_directories
         from lib.core.logger import Logger as _Logger
         from lib.game.sensor_engine import SensorEngine
+        from lib.core.visibility_lookup import sync_ranges_to_models
+
+        # The visibility model owns each sensor's range; bring the older
+        # per-team/per-tower radius settings in line with it before anything
+        # (agents, visuals, flag discovery) reads them.
+        for message in sync_ranges_to_models(config):
+            warning(message)
 
         # 1) Context & graph
         if ctx is None:
@@ -189,7 +196,16 @@ class GameEngine:
                 engine_kind = vis_engine_kind or getattr(gamms.visual.Engine, "PYGAME", None)
             else:
                 engine_kind = getattr(gamms.visual.Engine, "NO_VIS", None)
-            ctx = gamms.create_context(vis_engine=engine_kind, vis_kwargs=vis_kwargs)
+            # graph_engine=MEMORY avoids gamms's SQLITE GraphEngine, which creates
+            # a tempfile.TemporaryDirectory(dir=".") per context -- littering the
+            # repo root with leaked tmp<hash>/ dirs whenever a run doesn't exit
+            # cleanly (killed background job, crash). MEMORY skips the tempdir
+            # entirely; verified byte-identical game outcomes against SQLITE.
+            ctx = gamms.create_context(
+                vis_engine=engine_kind,
+                vis_kwargs=vis_kwargs,
+                graph_engine=gamms.graph.Engine.MEMORY,
+            )
             
         # Create logger only if log_name is provided; write to log_dir if given
         logger = _Logger(log_name, path=log_dir or "") if log_name is not None else None
@@ -235,6 +251,229 @@ class GameEngine:
 
         return ctx, graph, vis_engine, sensor_engine, agent_engine, interaction_engine, logger
 
+    @staticmethod
+    def _video_name_from_json(json_filename: str) -> str:
+        stem = os.path.splitext(os.path.basename(json_filename))[0]
+        parts = stem.rsplit("_", 2)
+        if len(parts) == 3:
+            prefix, hash_part, timestamp = parts
+            is_hex_hash = len(hash_part) == 16 and all(ch in "0123456789abcdefABCDEF" for ch in hash_part)
+            if is_hex_hash and timestamp.isdigit():
+                return f"{prefix}_{timestamp}.mp4"
+        return f"{stem}.mp4"
+
+    @staticmethod
+    def _warn_unsupported_python() -> None:
+        import sys as _sys
+        _major, _minor = _sys.version_info[:2]
+        if (_major, _minor) < (3, 11):
+            warning(f"Python {_major}.{_minor} is too old. Python 3.11 or 3.12 is recommended.")
+        elif (_major, _minor) > (3, 12):
+            warning(f"Python {_major}.{_minor} is newer than recommended. Use Python 3.11 or 3.12 to avoid compatibility issues with gamms.")
+
+    @staticmethod
+    def _strategy_label(strategy_obj: Union[str, Any, None]) -> Optional[str]:
+        """Display name for a strategy given as an import path, a module object, or None."""
+        if strategy_obj is None:
+            return None
+        if isinstance(strategy_obj, str):
+            return strategy_obj
+        return getattr(strategy_obj, "__name__", strategy_obj.__class__.__name__)
+
+    @staticmethod
+    def _set_logger_metadata(
+        engine: "GameEngine",
+        config: Dict[str, Any],
+        config_main: str,
+        extra_defs: Optional[str],
+        red_strategy: Union[str, Any, None],
+        blue_strategy: Union[str, Any, None],
+    ) -> None:
+        """Stamp the run's config/strategy identity onto the logger's metadata."""
+        try:
+            metadata = engine.logger.get_metadata()
+            metadata.update(
+                {
+                    "config_main": str(config_main),
+                    "extra_defs": str(extra_defs) if extra_defs else None,
+                    "red_strategy": GameEngine._strategy_label(red_strategy),
+                    "blue_strategy": GameEngine._strategy_label(blue_strategy),
+                    "max_time": config.get("game", {}).get("max_time"),
+                    "game_rule": config.get("game", {}).get("game_rule"),
+                }
+            )
+            engine.logger.set_metadata(metadata)
+        except Exception as e:
+            warning(f"Failed to set logger metadata: {e}")
+
+    @staticmethod
+    def _video_settings(config: Dict[str, Any]) -> Tuple[float, int]:
+        """Read (video_fps, video_frames_per_step) from the visualization config."""
+        _vis_cfg_rec = (config.get("visualization", {}) or {})
+        video_fps_raw = _vis_cfg_rec.get("video_fps", 20)
+        try:
+            video_fps = float(video_fps_raw)
+            if video_fps <= 0:
+                raise ValueError("video_fps must be > 0")
+        except Exception:
+            warning(f"Invalid visualization.video_fps={video_fps_raw}; using default 20")
+            video_fps = 20.0
+
+        # Each game step is rendered exactly this many times with alpha 0→1,
+        # so every step always produces the same frame count regardless of
+        # how fast or slow the wall clock runs.
+        video_frames_per_step_raw = _vis_cfg_rec.get("video_frames_per_step", 5)
+        try:
+            video_frames_per_step = max(1, int(video_frames_per_step_raw))
+        except Exception:
+            video_frames_per_step = 5
+        return video_fps, video_frames_per_step
+
+    @staticmethod
+    def _start_video_recording(
+        ctx: Any,
+        project_root: str,
+        video_fps: float,
+        video_frames_per_step: int,
+    ) -> Tuple[Optional[Any], Optional[str], Optional[Any]]:
+        """
+        Patch the gamms visual's simulate() to capture frames into a temp MP4.
+        Returns (video_writer, video_temp_path, original_simulate) — all None
+        if recording could not be started.
+        """
+        video_writer: Optional[Any] = None
+        video_temp_path: Optional[str] = None
+        original_visual_method: Optional[Any] = None
+        try:
+            import imageio.v2 as imageio
+
+            visual_obj = getattr(ctx, "visual", None)
+            if visual_obj is None:
+                warning("record_video=True but no visual object is available on context.")
+            elif not hasattr(visual_obj, "simulate"):
+                warning("record_video=True but gamms visual has no simulate(); recording disabled.")
+            else:
+                original_visual_method = visual_obj.simulate
+                video_temp_path = os.path.join(project_root, f".tmp_video_{int(time.time())}.mp4")
+                video_writer = imageio.get_writer(video_temp_path, fps=video_fps)
+                frame_capture_error_reported = False
+
+                def _capture_frame() -> None:
+                    nonlocal frame_capture_error_reported
+                    try:
+                        img_data = ctx.visual._pygame.surfarray.array3d(ctx.visual._screen)
+                        img_data = img_data.transpose([1, 0, 2])
+                        video_writer.append_data(img_data)
+                    except Exception as e:
+                        if not frame_capture_error_reported:
+                            warning(f"Frame capture failed during video recording: {e}")
+                            frame_capture_error_reported = True
+
+                alpha_update_error_reported = False
+
+                def _patched_simulate() -> None:
+                    nonlocal alpha_update_error_reported
+                    n = video_frames_per_step
+                    # _toggle_waiting_simulation(True) sets _waiting_simulation=True
+                    # and _alpha=0 on every dynamic artist, which tells the drawer to
+                    # lerp between prev_node_id and current_node_id using _alpha.
+                    # _dynamic_artists (not _agent_artists — that attribute doesn't
+                    # exist on gamms' PygameVisualizationEngine) mirrors exactly what
+                    # the real simulate()/handle_tick() updates.
+                    visual_obj._toggle_waiting_simulation(True)
+                    visual_obj._simulation_time = 0.0
+                    for i in range(n):
+                        alpha = (i + 1) / n
+                        try:
+                            for artist in visual_obj._dynamic_artists.values():
+                                artist.data["_alpha"] = alpha
+                        except Exception as e:
+                            if not alpha_update_error_reported:
+                                warning(f"Failed to update animation alpha during video recording: {e}")
+                                alpha_update_error_reported = True
+                        try:
+                            visual_obj.handle_input()
+                            visual_obj.handle_single_draw()
+                            visual_obj._pygame.display.flip()
+                            visual_obj._clock.tick()
+                        except Exception:
+                            original_visual_method()
+                            return
+                        _capture_frame()
+                    visual_obj._toggle_waiting_simulation(False)
+                    visual_obj._simulation_time = 0.0
+
+                setattr(visual_obj, "simulate", _patched_simulate)
+                success(f"Video recording enabled "
+                        f"({video_fps:.0f} fps × {video_frames_per_step} frames/step "
+                        f"= {video_frames_per_step/video_fps:.2f}s per step)")
+                return video_writer, video_temp_path, original_visual_method
+        except Exception as e:
+            warning(f"Failed to start video recording: {e}")
+            return None, None, None
+        return None, None, None
+
+    @staticmethod
+    def _write_json_log(engine: "GameEngine") -> Optional[str]:
+        """Write the game's JSON log; returns its filename, or None if the write failed."""
+        json_filename: Optional[str] = None
+        # Make sure the target directory exists; avoids write errors in the logger
+        if hasattr(engine.logger, "path"):
+            try:
+                os.makedirs(engine.logger.path, exist_ok=True)
+            except Exception:
+                pass  # non-fatal; logger will throw if it truly cannot write
+
+        # Write a JSON log file (auto-generated name)
+        try:
+            fname = engine.logger.write_to_file(format="json")  # JSON ensures broad compatibility
+            json_filename = fname
+            if hasattr(engine.logger, "path"):
+                success(f"Log written to: {os.path.join(engine.logger.path, fname)}")
+            else:
+                success(f"Log file: {fname}")
+        except Exception as e:
+            warning(f"Failed to write log file: {e}")
+        return json_filename
+
+    @staticmethod
+    def _finish_video_recording(
+        ctx: Any,
+        video_writer: Optional[Any],
+        video_temp_path: Optional[str],
+        original_visual_method: Optional[Any],
+        json_filename: Optional[str],
+        log_name: Optional[str],
+        project_root: str,
+    ) -> None:
+        """Restore simulate(), close the writer, and move the temp MP4 to its final name."""
+        if original_visual_method is not None:
+            try:
+                setattr(ctx.visual, "simulate", original_visual_method)
+            except Exception:
+                pass
+
+        if video_writer is not None:
+            try:
+                video_writer.close()
+            except Exception as e:
+                warning(f"Failed to finalize video writer: {e}")
+
+        if video_temp_path and os.path.exists(video_temp_path):
+            if json_filename:
+                video_filename = GameEngine._video_name_from_json(json_filename)
+            elif log_name:
+                video_filename = f"{log_name}_{int(time.time())}.mp4"
+            else:
+                video_filename = f"recording_{int(time.time())}.mp4"
+
+            video_output_path = os.path.join(project_root, video_filename)
+            try:
+                os.replace(video_temp_path, video_output_path)
+                success(f"Video written to: {video_output_path}")
+            except Exception as e:
+                warning(f"Failed to write final video file: {e}")
+
     @classmethod
     def launch_from_files(
         cls,
@@ -271,22 +510,7 @@ class GameEngine:
         # Lazily import loader/utilities here
         from lib.config.config_loader import ConfigLoader
 
-        def _video_name_from_json(json_filename: str) -> str:
-            stem = os.path.splitext(os.path.basename(json_filename))[0]
-            parts = stem.rsplit("_", 2)
-            if len(parts) == 3:
-                prefix, hash_part, timestamp = parts
-                is_hex_hash = len(hash_part) == 16 and all(ch in "0123456789abcdefABCDEF" for ch in hash_part)
-                if is_hex_hash and timestamp.isdigit():
-                    return f"{prefix}_{timestamp}.mp4"
-            return f"{stem}.mp4"
-
-        import sys as _sys
-        _major, _minor = _sys.version_info[:2]
-        if (_major, _minor) < (3, 11):
-            warning(f"Python {_major}.{_minor} is too old. Python 3.11 or 3.12 is recommended.")
-        elif (_major, _minor) > (3, 12):
-            warning(f"Python {_major}.{_minor} is newer than recommended. Use Python 3.11 or 3.12 to avoid compatibility issues with gamms.")
+        cls._warn_unsupported_python()
 
         if set_level is not None:
             set_log_level(set_level)
@@ -322,7 +546,12 @@ class GameEngine:
         # Visuals
         engine.setup_game_visuals(config.get("agents", {}))
         if engine.vis_engine:
-            engine.vis_engine.set_match_info(red_strategy, blue_strategy, config_main, config)
+            # The HUD wants names; strategies may also arrive as module objects or None.
+            engine.vis_engine.set_match_info(
+                cls._strategy_label(red_strategy) or "none",
+                cls._strategy_label(blue_strategy) or "none",
+                config_main, config,
+            )
         if tiff_path and engine.vis_engine:
             engine.vis_engine.setup_map_overlay(tiff_path)
 
@@ -332,180 +561,35 @@ class GameEngine:
             engine.assign_strategies(red_mod, blue_mod)
 
         if engine.logger:
-            def _strategy_label(strategy_obj: Union[str, Any, None]) -> Optional[str]:
-                if strategy_obj is None:
-                    return None
-                if isinstance(strategy_obj, str):
-                    return strategy_obj
-                return getattr(strategy_obj, "__name__", strategy_obj.__class__.__name__)
-
-            try:
-                metadata = engine.logger.get_metadata()
-                metadata.update(
-                    {
-                        "config_main": str(config_main),
-                        "extra_defs": str(extra_defs) if extra_defs else None,
-                        "red_strategy": _strategy_label(red_strategy),
-                        "blue_strategy": _strategy_label(blue_strategy),
-                        "max_time": config.get("game", {}).get("max_time"),
-                        "game_rule": config.get("game", {}).get("game_rule"),
-                    }
-                )
-                engine.logger.set_metadata(metadata)
-            except Exception as e:
-                warning(f"Failed to set logger metadata: {e}")
+            cls._set_logger_metadata(engine, config, config_main, extra_defs, red_strategy, blue_strategy)
 
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        _vis_cfg_rec = (config.get("visualization", {}) or {})
-        video_fps_raw = _vis_cfg_rec.get("video_fps", 20)
-        try:
-            video_fps = float(video_fps_raw)
-            if video_fps <= 0:
-                raise ValueError("video_fps must be > 0")
-        except Exception:
-            warning(f"Invalid visualization.video_fps={video_fps_raw}; using default 20")
-            video_fps = 20.0
+        video_fps, video_frames_per_step = cls._video_settings(config)
 
-        # Each game step is rendered exactly this many times with alpha 0→1,
-        # so every step always produces the same frame count regardless of
-        # how fast or slow the wall clock runs.
-        video_frames_per_step_raw = _vis_cfg_rec.get("video_frames_per_step", 5)
-        try:
-            video_frames_per_step = max(1, int(video_frames_per_step_raw))
-        except Exception:
-            video_frames_per_step = 5
-
-        json_filename: Optional[str] = None
         video_writer: Optional[Any] = None
         video_temp_path: Optional[str] = None
-        video_method_name: Optional[str] = None
         original_visual_method: Optional[Any] = None
-
         if record_video:
             if not vis:
                 warning("record_video=True ignored because vis=False.")
             else:
-                try:
-                    import imageio.v2 as imageio
+                video_writer, video_temp_path, original_visual_method = cls._start_video_recording(
+                    ctx, project_root, video_fps, video_frames_per_step
+                )
 
-                    visual_obj = getattr(ctx, "visual", None)
-                    if visual_obj is None:
-                        warning("record_video=True but no visual object is available on context.")
-                    elif not hasattr(visual_obj, "simulate"):
-                        warning("record_video=True but gamms visual has no simulate(); recording disabled.")
-                    else:
-                        video_method_name = "simulate"
-                        original_visual_method = visual_obj.simulate
-                        video_temp_path = os.path.join(project_root, f".tmp_video_{int(time.time())}.mp4")
-                        video_writer = imageio.get_writer(video_temp_path, fps=video_fps)
-                        frame_capture_error_reported = False
-
-                        def _capture_frame() -> None:
-                            nonlocal frame_capture_error_reported
-                            try:
-                                img_data = ctx.visual._pygame.surfarray.array3d(ctx.visual._screen)
-                                img_data = img_data.transpose([1, 0, 2])
-                                video_writer.append_data(img_data)
-                            except Exception as e:
-                                if not frame_capture_error_reported:
-                                    warning(f"Frame capture failed during video recording: {e}")
-                                    frame_capture_error_reported = True
-
-                        alpha_update_error_reported = False
-
-                        def _patched_simulate() -> None:
-                            nonlocal alpha_update_error_reported
-                            n = video_frames_per_step
-                            # _toggle_waiting_simulation(True) sets _waiting_simulation=True
-                            # and _alpha=0 on every dynamic artist, which tells the drawer to
-                            # lerp between prev_node_id and current_node_id using _alpha.
-                            # _dynamic_artists (not _agent_artists — that attribute doesn't
-                            # exist on gamms' PygameVisualizationEngine) mirrors exactly what
-                            # the real simulate()/handle_tick() updates.
-                            visual_obj._toggle_waiting_simulation(True)
-                            visual_obj._simulation_time = 0.0
-                            for i in range(n):
-                                alpha = (i + 1) / n
-                                try:
-                                    for artist in visual_obj._dynamic_artists.values():
-                                        artist.data["_alpha"] = alpha
-                                except Exception as e:
-                                    if not alpha_update_error_reported:
-                                        warning(f"Failed to update animation alpha during video recording: {e}")
-                                        alpha_update_error_reported = True
-                                try:
-                                    visual_obj.handle_input()
-                                    visual_obj.handle_single_draw()
-                                    visual_obj._pygame.display.flip()
-                                    visual_obj._clock.tick()
-                                except Exception:
-                                    original_visual_method()
-                                    return
-                                _capture_frame()
-                            visual_obj._toggle_waiting_simulation(False)
-                            visual_obj._simulation_time = 0.0
-
-                        setattr(visual_obj, "simulate", _patched_simulate)
-                        success(f"Video recording enabled "
-                                f"({video_fps:.0f} fps × {video_frames_per_step} frames/step "
-                                f"= {video_frames_per_step/video_fps:.2f}s per step)")
-                except Exception as e:
-                    warning(f"Failed to start video recording: {e}")
-                    video_writer = None
-                    video_temp_path = None
-                    video_method_name = None
-                    original_visual_method = None
-
+        json_filename: Optional[str] = None
         try:
             # Run
             engine.run_game()
             success(str(engine))  # prints nice summary via __str__
 
             if engine.logger:
-                # Make sure the target directory exists; avoids write errors in the logger
-                if hasattr(engine.logger, "path"):
-                    try:
-                        os.makedirs(engine.logger.path, exist_ok=True)
-                    except Exception:
-                        pass  # non-fatal; logger will throw if it truly cannot write
-
-                # Write a JSON log file (auto-generated name)
-                try:
-                    fname = engine.logger.write_to_file(format="json")  # JSON ensures broad compatibility
-                    json_filename = fname
-                    if hasattr(engine.logger, "path"):
-                        success(f"Log written to: {os.path.join(engine.logger.path, fname)}")
-                    else:
-                        success(f"Log file: {fname}")
-                except Exception as e:
-                    warning(f"Failed to write log file: {e}")
+                json_filename = cls._write_json_log(engine)
         finally:
-            if video_method_name and original_visual_method is not None:
-                try:
-                    setattr(ctx.visual, video_method_name, original_visual_method)
-                except Exception:
-                    pass
-
-            if video_writer is not None:
-                try:
-                    video_writer.close()
-                except Exception as e:
-                    warning(f"Failed to finalize video writer: {e}")
-
-            if video_temp_path and os.path.exists(video_temp_path):
-                if json_filename:
-                    video_filename = _video_name_from_json(json_filename)
-                elif log_name:
-                    video_filename = f"{log_name}_{int(time.time())}.mp4"
-                else:
-                    video_filename = f"recording_{int(time.time())}.mp4"
-
-                video_output_path = os.path.join(project_root, video_filename)
-                try:
-                    os.replace(video_temp_path, video_output_path)
-                    success(f"Video written to: {video_output_path}")
-                except Exception as e:
-                    warning(f"Failed to write final video file: {e}")
+            cls._finish_video_recording(
+                ctx, video_writer, video_temp_path, original_visual_method,
+                json_filename, log_name, project_root,
+            )
         return engine
 
     # ---------- Original functionality (unchanged logic) ----------
@@ -603,7 +687,7 @@ class GameEngine:
                         "payoff": {"red": self.red_payoff_accum, "blue": self.blue_payoff_accum},
                         "name": agent_name,
                         "agent_controller": agent_controller,
-                        "team_cache": agent_controller.cache,
+                        "team_cache": agent_controller.team_cache,
                         "rule_config": self._rule_config,
                     }
                 )
@@ -651,7 +735,7 @@ class GameEngine:
                 stationary = [
                     sensors[sname][1]
                     for sname in sensors
-                    if sname.startswith("stationary_")
+                    if sname.startswith("stationary_") and not sname.endswith("_region")
                 ]
                 if stationary:
                     enemies: Dict[str, int] = {}
@@ -676,6 +760,9 @@ class GameEngine:
                         # under "stationary" (only present for RegionSensor-backed
                         # towers, not the legacy StationarySensor).
                         "table": stationary[0].get("table", {}),
+                        # Combined coverage of every tower, under the same key
+                        # every other ranged sensor reports its coverage.
+                        "region": frozenset().union(*(entry.get("region", ()) for entry in stationary)),
                     })
 
                 if hasattr(agent_controller, "strategy") and agent_controller.strategy is not None:

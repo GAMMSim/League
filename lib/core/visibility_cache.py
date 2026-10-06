@@ -7,6 +7,11 @@ import tempfile
 import networkx as nx
 
 try:
+    from lib.core.readonly import ReadOnlyDict
+except ImportError:
+    from .readonly import ReadOnlyDict
+
+try:
     from lib.core.console import debug, warning, success
     from lib.core.visibility_generators import build as _build_visibility_model
 except ImportError:
@@ -22,8 +27,25 @@ _VIS_SIG_KEY = "__visibility_models_signature"
 _GRAPH_SOURCE_TOKEN_KEY = "__graph_source_token"
 _GRAPH_SOURCE_PATH_KEY = "__graph_source_path"
 
+# Repo root: lib/core/visibility_cache.py -> lib/core -> lib -> root.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # Default directory for genspec-provisioned (load-or-build) model files.
 _DEFAULT_VIS_DIR = "graphs/visibility"
+
+
+def _resolve_cache_dir(d: str) -> Path:
+    """
+    Anchor a cache directory to the repo root rather than the CWD.
+
+    Relative paths used to resolve against wherever the process was started,
+    so `cd mass_eval && python mass_eval_batch.py` built a second, redundant
+    table set at mass_eval/graphs/ instead of reusing <root>/graphs/.
+    Absolute paths are honored as given.
+    """
+    p = Path(d)
+    return p if p.is_absolute() else _PROJECT_ROOT / p
+
 
 # Process-wide registry. Keyed by (graph_source_token, specs_signature) so two
 # games on the same graph + same visibility files share one set of tables.
@@ -45,9 +67,9 @@ def _normalize_model(raw: Any) -> Dict[int, frozenset]:
     the model exactly as authored.
     """
     if isinstance(raw, nx.Graph):
-        return {n: frozenset(raw.neighbors(n)) for n in raw.nodes}
+        return ReadOnlyDict((n, frozenset(raw.neighbors(n))) for n in raw.nodes)
     if isinstance(raw, dict):
-        return {int(k): frozenset(int(x) for x in v) for k, v in raw.items()}
+        return ReadOnlyDict((int(k), frozenset(int(x) for x in v)) for k, v in raw.items())
     raise TypeError(
         f"Unsupported visibility model type: {type(raw).__name__} "
         "(expected a networkx graph or a {node: [visible nodes]} dict)"
@@ -90,7 +112,7 @@ def _genspec_sig(genspec: Dict[str, Any]) -> str:
 
 
 def _provisioned_path(vis_dir: str, graph_stem: str, model_name: str) -> str:
-    return str(Path(vis_dir) / f"{graph_stem}_{model_name}.pkl")
+    return str(_resolve_cache_dir(vis_dir) / f"{graph_stem}_{model_name}.pkl")
 
 
 def _load_provisioned(path: str, genspec: Dict[str, Any]) -> Optional[Dict[int, frozenset]]:

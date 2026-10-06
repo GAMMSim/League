@@ -91,6 +91,80 @@ def resolve_line_of_sight_ranges(
     return dynamic, static
 
 
+def _model_range(spec: Any) -> Optional[float]:
+    """A visibility model's metric range, or None if it has none (k-hop,
+    unlimited line of sight)."""
+    if not isinstance(spec, dict):
+        return None
+    value = spec.get("max_range") if spec.get("type") == "line_of_sight" else (
+        spec.get("range") if spec.get("type") == "radius" else None
+    )
+    return float(value) if value is not None else None
+
+
+def sync_ranges_to_models(config: Dict[str, Any]) -> List[str]:
+    """
+    Make the visibility model the single source of a sensor's range.
+
+    `agents.<team>_global.sensing_radius` and
+    `environment.blue_stationary_sensor_radius` are older copies of that
+    range, still read by the visuals, the launcher preview and flag
+    discovery. Wherever a team's agent-carried sensors (or the towers) name
+    models that agree on one range, that range is written over the copy, in
+    place. Teams whose sensors name no model (rule v1.2's plain-string forms)
+    are left alone — there the copy IS the source.
+
+    Returns one message per value that disagreed and was replaced, plus one
+    per team whose models disagree with each other (left untouched).
+    """
+    messages: List[str] = []
+    env_config = config.get("environment", {}) or {}
+    model_specs = env_config.get("visibility_models", {}) or {}
+
+    tower_ranges = set()
+    for key, team_config in (config.get("agents", {}) or {}).items():
+        if not key.endswith("_global") or not isinstance(team_config, dict):
+            continue
+        carried = set()
+        for entry in team_config.get("sensors", []) or []:
+            if not isinstance(entry, dict):
+                continue
+            model_range = _model_range(model_specs.get(entry.get("model")))
+            if model_range is None:
+                continue
+            (tower_ranges if "at" in entry else carried).add(model_range)
+        if len(carried) > 1:
+            messages.append(
+                f"{key}: agent-carried sensors use different model ranges {sorted(carried)}; "
+                f"sensing_radius={team_config.get('sensing_radius')} left as is"
+            )
+        elif carried:
+            model_range = carried.pop()
+            current = team_config.get("sensing_radius")
+            if current is not None and float(current) != model_range:
+                messages.append(
+                    f"{key}.sensing_radius={current} disagrees with its sensors' model range "
+                    f"{model_range:g}; using {model_range:g}"
+                )
+            team_config["sensing_radius"] = int(model_range) if model_range.is_integer() else model_range
+
+    if len(tower_ranges) > 1:
+        messages.append(
+            f"tower sensors use different model ranges {sorted(tower_ranges)}; "
+            f"blue_stationary_sensor_radius={env_config.get('blue_stationary_sensor_radius')} left as is"
+        )
+    elif tower_ranges:
+        model_range = tower_ranges.pop()
+        current = env_config.get("blue_stationary_sensor_radius")
+        if current is not None and float(current) != model_range:
+            messages.append(
+                f"environment.blue_stationary_sensor_radius={current} disagrees with the tower "
+                f"model range {model_range:g}; using {model_range:g}"
+            )
+        env_config["blue_stationary_sensor_radius"] = int(model_range) if model_range.is_integer() else model_range
+    return messages
+
+
 def resolve_line_of_sight_tables(
     config: Dict[str, Any],
     graph: Optional[nx.Graph],

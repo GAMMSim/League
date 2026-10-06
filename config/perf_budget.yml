@@ -1,0 +1,24 @@
+# Runtime budget for check_policy.py.
+#
+# Every number is in machine units: multiples of the time the machine running
+# the check needs for the fixed reference workload (1.2 s on the Apple Silicon laptop it was tuned on).
+# To turn a limit in seconds on the evaluation machine into units, divide it by
+# that machine's unit, which check_policy.py prints at startup.
+#
+# Set 2026-10-06. At the mean limit a full R5B5 game (75 ticks, 375 calls per
+# team) spends about 4 units per team in strategy code. README section 7
+# explains the three limits.
+
+default:
+  mean_per_call: 0.01  # average over all calls after each agent's first
+  max_per_call: 0.5    # slowest single call after each agent's first
+  first_call: 2.0      # each agent's first call, where one-time setup happens
+
+# Optional per-size overrides, keyed by config directory name, e.g.
+# sizes:
+#   R5B5F3-5: {mean_per_call: 0.15}
+sizes: {}
+
+# Safety stops. Either one ends the whole check with a failure.
+abort_call: 20       # a single call longer than this
+game_timeout: 200    # a whole game longer than this (macOS and Linux only)

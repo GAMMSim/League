@@ -1,6 +1,6 @@
 game:
-  game_rule: "v1.2"
-  max_time: 100
+  game_rule: "v1.3"
+  max_time: 75
   interaction_model:
     tagging: both_kill
     capture: kill

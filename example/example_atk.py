@@ -1,7 +1,6 @@
 def strategy(state: dict) -> str:
     from typing import Dict, List, Tuple, Any
     import networkx as nx
-    import random
 
     # ===== AGENT CONTROLLER =====
     # DO NOT directly call agent_ctrl methods unless you understand the library
@@ -43,14 +42,30 @@ def strategy(state: dict) -> str:
 
     candidates: List[int] = agent_ctrl.sensor_data(state, "candidate_flag")["candidate_flags"] if "candidate_flag" in sensors else []  # Possible flag locations
 
-    enemies: Dict[str, int]   = agent_ctrl.sensor_data(state, "agent")["enemies"]   if "agent" in sensors else {}  # Enemy agents in game {name: node_id}
-    teammates: Dict[str, int] = agent_ctrl.sensor_data(state, "agent")["teammates"] if "agent" in sensors else {}  # Teammate agents in game {name: node_id}
+    # Defender visibility depends on the rule version. Up to v1.3 red carried the
+    # whole-map "agent" sensor and saw every defender every tick; from v1.4 red
+    # only sees defenders that are in line of sight, through "egocentric_agent"
+    # (exactly how blue has always sensed red). Teammates stay whole-map either
+    # way -- via "agent" before, via "custom_team" now. Reading both keeps this
+    # example working under either rule file.
+    if "agent" in sensors:  # v1.3 and earlier: omniscient
+        enemies: Dict[str, int]   = agent_ctrl.sensor_data(state, "agent")["enemies"]    # Enemy agents in game {name: node_id}
+        teammates: Dict[str, int] = agent_ctrl.sensor_data(state, "agent")["teammates"]  # Teammate agents in game {name: node_id}
+    else:                   # v1.4+: occlusion-limited enemies, whole-map teammates
+        enemies    = agent_ctrl.sensor_data(state, "egocentric_agent")["enemies"] if "egocentric_agent" in sensors else {}  # Defenders currently in line of sight {name: node_id}
+        teammates  = agent_ctrl.sensor_data(state, "custom_team") if "custom_team" in sensors else {}                       # Teammate agents in game {name: node_id}
 
     detected_flags: List[int] = agent_ctrl.sensor_data(state, "egocentric_flag")["detected_flags"] if "egocentric_flag" in sensors else []  # Real flags within range; flags visible to agent
     flag_count: int           = agent_ctrl.sensor_data(state, "egocentric_flag").get("flag_count", len(detected_flags)) if "egocentric_flag" in sensors else 0   # Number of detected flags (region-sensor payloads don't carry this key; derive it)
 
-    egocentric_flag_visibility_graph: Dict[int, Any] = agent_ctrl.sensor_data(state, "egocentric_flag").get("table", {}) if "egocentric_flag" in sensors else {}  # SAME sensor as above, extra key: FULL node -> visible-nodes table (line-of-sight), static for the whole game
-    visible_from_here = egocentric_flag_visibility_graph.get(current_pos, frozenset())  # Visible nodes from curr_pos specifically — look up any node the same way
+    # ----- Sensor coverage -----
+    # A ranged sensor reports what it can cover as well as what it found, so there is
+    # no separate "..._region" sensor: ask the sensor itself. Both calls return None
+    # when the sensor is absent or has no range (e.g. v1.3, where red has no
+    # "egocentric_agent"), hence the `or frozenset()`.
+    agent_coverage = agent_ctrl.coverage(state, "egocentric_agent") or frozenset()  # Nodes where this agent would spot a defender right now (line of sight, 400)
+    flag_coverage  = agent_ctrl.coverage(state, "egocentric_flag")  or frozenset()  # Nodes where this agent would detect a real flag right now (line of sight, 400)
+    flag_coverage_from_first_candidate = (agent_ctrl.coverage_from(state, "egocentric_flag", candidates[0]) or frozenset()) if candidates else frozenset()  # What the flag sensor WOULD cover standing on another node — any node works
 
     # ===== AGENT MAP (SHARED) =====
     agent_map = agent_ctrl.map  # Team-shared map with positions and graph
@@ -77,24 +92,58 @@ def strategy(state: dict) -> str:
 
     # Update enemy positions from sensor data (if you have visibility)
     agent_map.update_team_agents(agent_ctrl.enemy_team, enemies, current_time)
-    # You can update your teammates similarly via agent_ctrl.sensor_data(state, "agent")["teammates"]
+    # You can update your teammates similarly from the `teammates` dict resolved above
 
     # How to get all positions of a team from agent map
     teammates_data: List[Tuple[str, int, int]] = agent_map.get_team_agents(team)            # [(name, pos, age)] of teammates
 
     # ===== DECISION LOGIC =====
+    # Search the candidate flags as a team, capture the real ones, and keep out of defenders' reach.
     target: int = current_pos  # Default action is to stay at current position
+    dist = agent_map.shortest_path_length
 
-    if detected_flags:
-        target = agent_map.shortest_path_step(current_pos, detected_flags[0], speed)  # Move toward first visible flag
-    elif agent_map.graph is not None:
-        neighbors: List[int] = list(agent_map.graph.neighbors(current_pos))  # Adjacent nodes
-        if neighbors:
-            target = random.choice(neighbors)  # No flags visible — wander to a neighbor
+    # 1. Share flag knowledge through the team cache. A candidate inside the flag sensor's
+    #    coverage is settled: real if the sensor reports a flag there, fake otherwise.
+    real_known: set = agent_ctrl.get_team("real_flags") or set()         # Real flags any teammate has seen
+    checked: set    = agent_ctrl.get_team("checked_candidates") or set()  # Candidates any teammate has settled
+    real_known.update(detected_flags)
+    checked.update(detected_flags)
+    checked.update(c for c in candidates if c in flag_coverage)
+    agent_ctrl.update_team(real_flags=real_known, checked_candidates=checked)
+
+    # 2. Defenders come from the shared map, so one teammate's sighting warns the whole team.
+    #    Sightings older than 3 ticks are dropped (the defender has moved on, or was tagged out).
+    defenders = [pos for _, pos, age in agent_map.get_team_agents(agent_ctrl.enemy_team) if age <= 3]
+    reach = opp_tagging_radius + rule_config["blue_global"]["speed"]  # A defender can step, then tag
+
+    # 3. Pick a goal: the nearest known real flag or unsettled candidate. Candidates a living
+    #    teammate is already heading for are skipped, so the team spreads out over the search,
+    #    and so are goals a defender is standing guard over, as long as there is another choice.
+    claims: Dict[str, Any] = agent_ctrl.get_team("claims") or {}  # {agent name: its current goal}
+    claimed = {node for name, node in claims.items() if name != agent_ctrl.name and name in teammates}
+    unchecked = [c for c in candidates if c not in checked]
+    goals = list(real_known) + [c for c in unchecked if c not in claimed]
+    if not goals:
+        goals = unchecked  # Everything left is claimed — double up instead of idling
+    goals = [g for g in goals if all(dist(g, d) > reach + capture_radius for d in defenders)] or goals
+    goal = min(goals, key=lambda n: (dist(current_pos, n), n)) if goals else None
+    claims[agent_ctrl.name] = goal
+    agent_ctrl.set_team("claims", claims)
+
+    # 4. Step toward the goal without entering a defender's reach. Tagging is resolved before
+    #    capture, so a capturing step inside a defender's reach is not worth taking either.
+    if goal is not None and agent_map.graph is not None:
+        options: List[int] = [current_pos] + list(agent_map.graph.neighbors(current_pos))  # One hop is legal at any speed
+        safe = [n for n in options if all(dist(n, d) > reach for d in defenders)]
+        if safe:
+            target = min(safe, key=lambda n: (dist(n, goal), n))
+        else:
+            # Cornered: get as far from the defenders as possible
+            target = max(options, key=lambda n: (min(dist(n, d) for d in defenders), -n))
 
     # ===== OUTPUT =====
     state["action"] = target  # Required: set action for this turn
-    return f"moving to {target}" if target != current_pos else "holding position"  # avoid f-strings here if possible — string construction runs every call even when logging is off and will slow down mass eval
+    return "moving" if target != current_pos else "holding position"  # Keep this a constant: an f-string is built on every call even when logging is off and will slow down mass eval
 
 
 def map_strategy(agent_config):

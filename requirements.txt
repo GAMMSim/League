@@ -18,23 +18,45 @@ pyproj>=3.6
 #   macOS (Homebrew Python): brew install python-tk@3.12
 #   Linux (Debian/Ubuntu):   sudo apt install python3-tk
 #   Windows:                 bundled with the python.org installer
-matplotlib>=3.7
+# Upper bound is deliberate: config previews are committed, and matplotlib
+# decides their framing (no explicit axis limits -- see config_visualizer.py).
+# Moving 3.10.9 -> 3.11.2 during a venv rebuild redrew all 30 of them at
+# 35 dB against the versions in git. 3.11.x fixes still install; raise the
+# bound when you actually want a new major, so the reframing is a choice.
+matplotlib>=3.7,<3.12
 
 # ── Strategy policies ─────────────────────────────────────────────────────────
 scipy>=1.10
+
+# ── Replay logging (lib/core/logger.py) ───────────────────────────────────────
+# Optional: without it the logger silently falls back to a non-CBOR format
+# (CBOR_AVAILABLE = False), so installs that skip it get a different log
+# encoding with no warning. Listed here so that stays a choice, not an accident.
+cbor2>=5.4
+
+# ── GeoTIFF map overlay (lib/visual/map_overlay_visual.py) ────────────────────
+# Only needed when passing tiff_path=... to launch_from_files.
+rasterio>=1.3
 
 # ── Analysis / mass_eval (optional) ──────────────────────────────────────────
 pandas>=2.0
 seaborn>=0.12
 imageio>=2.28
 imageio[ffmpeg]>=2.28
-tqdm>=4.65
+# Exact equilibrium solver for nash_analysis.py / joint_map_analysis.py /
+# payoff_sensitivity.py. They fall back to scipy when it is missing.
+cvxpy>=1.3
+# tqdm>=4.65          # unused — no import anywhere in lib/, mass_eval/ or example/
 
 # ── MIT specific (optional) ─────────────────────────────────────────────────
-torch>=2.5.1,<=2.9.0
-torch-geometric>=2.7.0
-stable-baselines3>=2.6.0
-gymnasium>=1.1.1
-networkx>=3.4.2
-numpy>=2.2.0
+# Commented out 2026-09-28: the MIT policies that needed these now live in
+# policies/archive/v1.2r4/, and nothing in the active tree imports them.
+# torch pulls 2-3 GB on its own, so a fresh setup should not pay for it by
+# default. Uncomment if an MIT-style learned policy comes back.
+# torch>=2.5.1,<=2.9.0
+# torch-geometric>=2.7.0
+# stable-baselines3>=2.6.0
+# gymnasium>=1.1.1
+# networkx>=3.4.2     # duplicate of the core pin above (>=3.0)
+# numpy>=2.2.0        # duplicate of the core pin above (>=1.24)
 

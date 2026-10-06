@@ -75,6 +75,25 @@ class AgentController:
         entry = state.get("sensor", {}).get(sensor_name)
         return entry[1] if entry is not None else None
 
+    def coverage(self, state: Dict[str, Any], sensor_name: str) -> Optional[Any]:
+        """
+        Nodes the named ranged sensor covers right now (its capability, not
+        what it detected), or None if the sensor is absent or has no region.
+        """
+        payload = self.sensor_data(state, sensor_name)
+        return payload.get("region") if isinstance(payload, dict) else None
+
+    def coverage_from(self, state: Dict[str, Any], sensor_name: str, node_id: int) -> Optional[Any]:
+        """
+        Nodes the named ranged sensor WOULD cover if it stood at `node_id` —
+        a lookup in the sensor's own table, so it follows the same model
+        (line of sight, radius, k-hop). None if the sensor has no table or
+        the node is not in it.
+        """
+        payload = self.sensor_data(state, sensor_name)
+        table = payload.get("table") if isinstance(payload, dict) else None
+        return table.get(node_id) if table else None
+
     def get_team(self, key: str, default: Optional[Any] = None) -> Any:
         """Get a value from the shared team cache."""
         return self.team_cache.get(key, default)

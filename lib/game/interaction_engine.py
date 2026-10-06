@@ -134,15 +134,33 @@ class InteractionEngine:
     # --------------------------- Discovery resolution -------------------------
 
     def _process_flag_discoveries(self) -> Set[int]:
-        """Auto-detect flags within each red agent's sensing_radius (Euclidean)."""
+        """
+        Credit each flag a red agent's flag sensor can currently detect.
+
+        Follows the agent's own sensing model: a model-backed flag sensor
+        (line of sight, radius, k-hop) is asked for the nodes it covers from
+        the agent's node, so a flag hidden behind a building is not
+        discovered. Agents without one (rule v1.2's plain-string sensor) fall
+        back to euclidean distance within sensing_radius.
+        """
         _, blue_flags = self._get_flags()
         if not blue_flags:
             return set()
 
+        sensor_engine = getattr(self.engine, "sensor_engine", None)
         discovered: Set[int] = set()
         for agent in self._iter_team("red"):
             ctrl = self.engine.get_validated_agent(agent.name)
             if not ctrl:
+                continue
+            region = sensor_engine.flag_sensing_region(agent.name, agent.current_node_id) if sensor_engine else None
+            if region is not None:
+                for flag_node_id in blue_flags:
+                    if flag_node_id in self._discovered_flags or flag_node_id in discovered:
+                        continue
+                    if flag_node_id in region:
+                        info(f"[Discovery] {agent.name} discovered flag {flag_node_id} (in its flag sensor's region)")
+                        discovered.add(flag_node_id)
                 continue
             sr = getattr(ctrl, "sensing_radius", 0)
             if sr <= 0:
@@ -344,7 +362,7 @@ class InteractionEngine:
         if game_rule == "v2":
             red_flags = flags.get("red_flag_positions", [])
             blue_flags = flags.get("blue_flag_positions", [])
-        elif game_rule in ("v1.2", "test"):
+        elif game_rule in ("v1.2", "v1.3", "v1.4", "test"):
             debug(f"Using game rule {game_rule}; interpreting 'real_positions' as blue flags and no red flags")
             red_flags = []
             blue_flags = flags.get("real_positions", [])

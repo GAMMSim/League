@@ -1,6 +1,6 @@
 game:
-  game_rule: v1.2
-  max_time: 100
+  game_rule: v1.4
+  max_time: 75
   interaction_model:
     tagging: both_kill
     capture: kill
@@ -20,12 +20,15 @@ agents:
     sensors:
     - global_map
     - candidate_flag
-    - agent
+    - custom_team
+    - name: egocentric_agent
+      model: red_agent_r400
+      carrier: agent
+      team: red
     - name: egocentric_flag
       model: red_flag_r400
       carrier: agent
       flags: real
-    - egocentric_flag_region
   blue_global:
     speed: 1
     tagging_radius: 1
@@ -37,50 +40,53 @@ agents:
       model: blue_agent_r250
       carrier: agent
       team: blue
-    - egocentric_agent_region
     - flag
     - name: stationary
       model: blue_tower_r450
       at: blue_static_sensor_positions
   red_config:
     red_0:
-      start_node_id: 92
+      start_node_id: 104
     red_1:
-      start_node_id: 163
+      start_node_id: 100
     red_2:
-      start_node_id: 119
+      start_node_id: 117
     red_3:
-      start_node_id: 130
+      start_node_id: 119
     red_4:
-      start_node_id: 81
+      start_node_id: 114
   blue_config:
     blue_0:
-      start_node_id: 185
+      start_node_id: 35
     blue_1:
-      start_node_id: 184
+      start_node_id: 25
     blue_2:
-      start_node_id: 22
+      start_node_id: 19
     blue_3:
-      start_node_id: 3
+      start_node_id: 9
     blue_4:
-      start_node_id: 182
+      start_node_id: 186
 flags:
   real_positions:
-  - 33
-  - 182
-  - 15
+  - 11
+  - 36
+  - 29
   candidate_positions: &id001
-  - 33
-  - 182
-  - 15
-  - 9
-  - 32
+  - 11
+  - 36
+  - 29
+  - 183
+  - 13
 environment:
   graph_name: osm_200_a.pkl
   blue_stationary_sensor_radius: 450
   blue_static_sensor_positions: *id001
   visibility_models:
     red_flag_r400:
+      type: line_of_sight
+      crs: EPSG:32618
+      max_range: 400
+    red_agent_r400:
       type: line_of_sight
       crs: EPSG:32618
       max_range: 400
@@ -93,8 +99,8 @@ environment:
       crs: EPSG:32618
       max_range: 450
 generator:
-  id: 531ad55953
-  ts: '2026-07-13 23:26:43'
+  id: 1a2c198cc8
+  ts: '2026-09-28 09:44:00'
   cafl:
   - 12
   - 5

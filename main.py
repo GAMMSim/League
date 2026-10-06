@@ -2,7 +2,7 @@ from lib.game.game_engine import GameEngine
 from lib.core.console import LogLevel
 
 result = GameEngine.launch_from_files(
-    config_main="example/example_config.yml",
+    config_main="config/example_configs/osm_a/R3B3F3-5/R3B3F3-5_run0.yml",
     extra_defs="config/game_config.yml",
     red_strategy="example.example_atk",
     blue_strategy="example.example_def",

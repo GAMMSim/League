@@ -39,6 +39,11 @@ def _build_khop(graph: nx.Graph, params: Dict[str, Any]) -> Dict[int, List[int]]
 
 _DEFAULT_BUILDINGS_CACHE_DIR = "graphs/buildings"
 
+# Repo root: lib/core/visibility_generators.py -> lib/core -> lib -> root.
+# Building footprints are cached here rather than relative to the CWD, so a
+# run started from a subdirectory reuses one cache instead of refetching.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _get_building_polygons(graph: nx.Graph, params: Dict[str, Any]) -> List[Any]:
     """
@@ -66,6 +71,8 @@ def _get_building_polygons(graph: nx.Graph, params: Dict[str, Any]) -> List[Any]
     cache_key = f"{crs}|{min_x:.1f}|{min_y:.1f}|{max_x:.1f}|{max_y:.1f}"
     cache_hash = hashlib.sha1(cache_key.encode()).hexdigest()[:16]
     cache_dir = Path(params.get("buildings_cache_dir", _DEFAULT_BUILDINGS_CACHE_DIR))
+    if not cache_dir.is_absolute():
+        cache_dir = _PROJECT_ROOT / cache_dir
     cache_path = cache_dir / f"buildings_{cache_hash}.pkl"
 
     if cache_path.exists():
